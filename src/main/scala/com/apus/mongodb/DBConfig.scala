@@ -1,4 +1,4 @@
-package com.apus.content
+package com.apus.mongodb
 
 /**
   * Created by Joshua on 2018-11-06

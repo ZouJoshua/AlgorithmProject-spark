@@ -7,6 +7,11 @@ if [ x"${outputurl}" = x ]; then
    outputurl="mongodb://10.10.40.122:27017/article_repo.article_info"
 fi
 
+readhdfspath=$2
+if [ x"${readhdfspath}" = x ]; then
+   readhdfspath="/user/zoushuai/news_content/write_mongo_test"
+fi
+
 #依赖包路径
 libpath=$basepath/lib
 #依赖包
@@ -29,6 +34,6 @@ done
 --conf spark.driver.maxResultSize=6g \
 --conf spark.rpc.message.maxSize=2040 \
 --conf spark.yarn.executor.memoryOverhead=3g \
---class com.apus.content.WriteMongodb \
-${basepath}/lib/mongo_hdfs-1.0.jar \
--outputUrl ${outputurl}
+--class com.apus.mongodb.WriteMongodb \
+${basepath}/lib/AlgorithmProject-spark-1.0.jar \
+-outputUrl ${outputurl} -hdfspath ${readhdfspath}

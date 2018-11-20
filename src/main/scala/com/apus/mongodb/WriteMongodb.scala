@@ -1,7 +1,8 @@
-package com.apus.content
+package com.apus.mongodb
 
 import java.text.SimpleDateFormat
-import org.apache.spark.sql.SparkSession
+
+import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.apache.spark.sql.functions._
 
 /**
@@ -16,7 +17,7 @@ object WriteMongodb {
     val sdf = new  SimpleDateFormat("yyyy-MM-dd")
     val today = sdf.format(currentTimestamp)
 
-    val inputPath = DBConfig.readFromHdfsPath
+    val inputPath = variables.getOrElse("hdfspath", DBConfig.readFromHdfsPath)
 //    val outputUri = s"mongodb://${DBConfig.host}:${DBConfig.port}/${DBConfig.database}.${DBConfig.writeCollection}"
 
     val output = (DBConfig.userName, DBConfig.password) match {

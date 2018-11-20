@@ -13,6 +13,11 @@ if [ x"${inputurl}" = x ]; then
    inputurl="mongodb://10.10.40.122:27017/article_repo.operate_res"
 fi
 
+outputpath=$3
+if [ x"${outputpath}" = x ]; then
+   outputpath="/user/zoushuai/news_content/read_mongo_test/dt=${dt}"
+fi
+
 #依赖包路径
 libpath=$basepath/lib
 #依赖包
@@ -35,6 +40,6 @@ done
 --conf spark.driver.maxResultSize=6g \
 --conf spark.rpc.message.maxSize=2040 \
 --conf spark.yarn.executor.memoryOverhead=3g \
---class com.apus.content.ReadMongodb \
-${basepath}/lib/mongo_hdfs-1.0.jar \
--date ${dt} -inputUrl ${inputurl}
+--class com.apus.mongodb.ReadMongodb \
+${basepath}/lib/AlgorithmProject-spark-1.0.jar \
+-date ${dt} -inputUrl ${inputurl} -outpath ${outputpath}

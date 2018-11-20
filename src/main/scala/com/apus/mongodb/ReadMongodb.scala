@@ -1,9 +1,10 @@
-package com.apus.content
+package com.apus.mongodb
 
 import java.text.SimpleDateFormat
 
-import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.sql.functions._
+
 
 /**
   * Created by Joshua on 2018-11-06
@@ -24,7 +25,7 @@ object ReadMongodb {
     }
     val inputUri = variables.getOrElse("inputUrl", input)
 //    val inputUri = s"mongodb://${DBConfig.host}:${DBConfig.port}/${DBConfig.database}.${DBConfig.readCollection}"
-    val outputPath = DBConfig.writeToHdfsPath + "/dt=" + date
+    val outputPath = variables.getOrElse("outpath", DBConfig.writeToHdfsPath + "/dt=" + date)
 
     val spark = SparkSession.builder()
       .appName("MongoSparkConnectorIntro")
