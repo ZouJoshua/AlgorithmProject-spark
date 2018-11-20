@@ -1,2 +1,20 @@
-*.class
-*.log
+#################
+## Idea
+#################
+.project
+.metadata
+target/
+gen/
+tmp/
+*.tmp
+*.bak
+*.swp
+.classpath
+.settings/
+logs/
+*.iml
+.idea/
+
+__pycache__/
+*.pyc
+flow.sh
