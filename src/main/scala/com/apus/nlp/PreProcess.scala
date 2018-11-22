@@ -72,18 +72,18 @@ object PreProcess {
 //        .withColumn("three_level",col("three_level").cast(StringType))
         .repartition(512)
         .dropDuplicates("article")
-    }.filter("length(article) > 100").limit(100)
+    }.filter("length(article) > 100").limit(10000)
     articleDF.cache
 
     // 读取wiki词库
-    val wiki = spark.read.parquet(wikipath).limit(100).map(r => cleanString(r.getAs[String]("title"))).collect()
+    val wiki = spark.read.parquet(wikipath).map(r => cleanString(r.getAs[String]("title"))).collect().filter(_!=null)
     val wiki_bd = sc.broadcast(wiki)
     // 用Map结果contains wiki词库
     //    val wiki = spark.read.parquet(wikipath).map(x => (x.getAs[String]("title"),"1")).collect().toMap.filterKeys(_.contains("Bibby, Thomas"))
     //    val dict_bd = sc.broadcast(wiki)
 
     //Todo：分词后（4元词组）与wiki词库匹配，可能存在部分短语匹配不上
-    val art_wiki_df = articleDF.sample(false, 0.1).filter("article is not null").map{
+    val art_wiki_df = articleDF.filter("article is not null").map{
       r =>
         val id = r.getAs[String]("article_id")
         val text = cleanString(r.getAs[String]("article"))
