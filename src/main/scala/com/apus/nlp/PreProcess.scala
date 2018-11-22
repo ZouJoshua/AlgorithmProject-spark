@@ -1,8 +1,7 @@
 package com.apus.nlp
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{SparkSession, SaveMode}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
 import org.clulab.processors.Document
@@ -13,18 +12,32 @@ import org.clulab.processors.fastnlp.FastNLPProcessor
   */
 object PreProcess {
 
+  /**
+    *处理较干净的正文内容
+    * 1.二次清洗（清洗标点、大小写等）
+    * 2.分词（ngrams）
+    * 3.找wiki关联实体词
+    */
+
   def cleanString(str: String): String = {
+    /**
+      * 二次清洗
+      */
     if (str == null || str == "" || str.length <= 0 || str.replaceAll(" ", "").length <= 0 || str == "None") {
-      null
+      null  //wiki词库存在None单词，清洗后转化为null
     } else {
       str.toLowerCase.trim().replaceAll("[\r\n\t]", " ")
         .replaceAll("(&amp;|&#13;|&nbsp;)","")
         .replaceAll("[ ]+"," ")
         .replaceAll("(https?|ftp|file)://[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]","")
+        .replaceAll("^(\\w+((-\\w+)|(\\.\\w+))*)\\+\\w+((-\\w+)|(\\.\\w+))*\\@[A-Za-z0-9]+((\\.|-)[A-Za-z0-9]+)*\\.[A-Za-z0-9]+$","")
     }
   }
 
   def get_Ngrams(words:Seq[String], minSize: Int = 1, maxSize: Int = 4):Seq[String] ={
+    /**
+      * 切词，转化为 ngrams
+      */
     var Ngrams_result = Seq.empty[String]
     for(j <- minSize to maxSize){
       for(i <- words.indices){
@@ -40,6 +53,7 @@ object PreProcess {
 
 
   def main(args: Array[String]): Unit = {
+
     val spark = SparkSession.builder()
       .appName("PrepPocess-nlp")
       .getOrCreate()
@@ -49,22 +63,26 @@ object PreProcess {
     val dt = "2018-10"
     val newspath = "/user/zoushuai/news_content/clean_article/dt=%s"
     val wikipath = "/user/zoushuai/wiki_title"
+    val savepath = "/user/zoushuai/news_content/article_ngrams/dt=%s"
 
-//    val wikiDF = spark.read.parquet(newspath.format(dt)).distinct
-//    val news = spark.read.option("basePath","/user/hive/warehouse/apus_dw.db/dw_news_data_hour").parquet(readpath + "/dt=%s*".format(dt)).select("resource_id","html").distinct
-
+    // 读取较干净的新闻正文内容
     val articleDF = {
       spark.read.parquet(newspath.format(dt))
-        .selectExpr("resource_id as article_id","article")
+        .selectExpr("resource_id as article_id", "html", "article")
 //        .withColumn("three_level",col("three_level").cast(StringType))
         .repartition(512)
         .dropDuplicates("article")
     }.filter("length(article) > 100").limit(100)
     articleDF.cache
 
+    // 读取wiki词库
     val wiki = spark.read.parquet(wikipath).limit(100).map(r => cleanString(r.getAs[String]("title"))).collect()
     val wiki_bd = sc.broadcast(wiki)
+    // 用Map结果contains wiki词库
+    //    val wiki = spark.read.parquet(wikipath).map(x => (x.getAs[String]("title"),"1")).collect().toMap.filterKeys(_.contains("Bibby, Thomas"))
+    //    val dict_bd = sc.broadcast(wiki)
 
+    //Todo：分词后（4元词组）与wiki词库匹配，可能存在部分短语匹配不上
     val art_wiki_df = articleDF.sample(false, 0.1).filter("article is not null").map{
       r =>
         val id = r.getAs[String]("article_id")
@@ -79,11 +97,9 @@ object PreProcess {
         (id,output)
     }.toDF("article_id","entity_keywords")
 
-//    val wiki = spark.read.parquet(wikipath).map(x => (x.getAs[String]("title"),"1")).collect().toMap.filterKeys(_.contains("Bibby, Thomas"))
-//    val dict_bd = sc.broadcast(wiki)
-
-    val file = "/user/caifuli/new_stopwords.txt"
-    def get_Stopwords(file:String): Set[String] ={
+    // 处理停用词
+//    val file = "/user/caifuli/new_stopwords.txt"
+    def get_Stopwords(file:String="/user/caifuli/new_stopwords.txt"): Set[String] ={
       val stop = sc.textFile(file)
       val wordArr = stop.collect()
       var stopwordsSet: Set[String] = Set[String]()
@@ -92,9 +108,9 @@ object PreProcess {
       }
       stopwordsSet
     }
+    val stopwords_bd = sc.broadcast(get_Stopwords())
 
-    val stopwords_bd = sc.broadcast(get_Stopwords(file))
-
+    // 进行ngrams分词
     val Ngrams_df = articleDF.rdd.map{
       r =>
         val proc = new FastNLPProcessor()
@@ -109,35 +125,29 @@ object PreProcess {
             sentence.lemmas.getOrElse(Seq.empty[String]).asInstanceOf[Array[String]]
         }.filter(x => !stopwords_bd.value.contains(x))
         val ngrams = get_Ngrams(lemmas)
-        (id,text,ngrams)
-    }.toDF("article_id", "article", "n_grams")
+        (id,ngrams)
+    }.toDF("article_id","n_grams")
     Ngrams_df.cache
 
+    // html加标签 <i class="apus-entity-words">xxx</i>
     val tagUDF = udf{
       (article:String, words:Seq[String]) =>
         var tmp_art = " " + article + " "
         words.foreach{
           w =>
-            tmp_art = tmp_art.replaceAll("\\s(?i)" + w + "(?=\\s)$", " <i class=\"apus-entity-words\">" + w + "</i> ")
+            tmp_art = tmp_art.replaceAll("\\s(?i)" + w + "(?=\\s)", " <i class=\"apus-entity-words\">" + w + "</i> ")
         }
         tmp_art
     }
 
-    val art_dict_df = articleDF.sample(false, 0.1).filter("article is not null").map{
-      r =>
-        val id = r.getAs[String]("article_id")
-        val text = r.getAs[String]("article")
-        val split_word = {
-          text.replaceAll("(\\s*\\p{P}\\s+|\\s+\\p{P}\\s*)"," ")
-            .replaceAll("\\s+", " ")
-            .split(" ").toSeq
-        }
-        val words_Ngram = get_Ngrams(split_word, 1, 4).toSet
-        val output = wiki_bd.value.toSet.intersect(words_Ngram).toSeq
-        (id,output)
-    }.toDF("article_id","entity_keywords")
-
-    news_clean.write.mode(SaveMode.Overwrite).save(savepath + "/dt=" + dt)
+    // 存储结果
+    val news_result = {
+//      val seqUDF =udf((t:String) => Seq.empty[String])
+      articleDF.join(art_wiki_df, Seq("article_id"))
+        .join(Ngrams_df, Seq("article_id"))
+        .withColumn("html_tag",tagUDF(col("html"), col("entity_keywords")))
+    }
+    news_result.write.mode(SaveMode.Overwrite).save(savepath.format(dt))
     spark.stop()
   }
 }
