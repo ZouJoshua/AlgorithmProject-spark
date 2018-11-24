@@ -12,7 +12,7 @@ import org.clulab.processors.fastnlp.FastNLPProcessor
 /**
   * Created by Joshua on 2018-11-20
   */
-object PreProcess {
+object PrepProcess {
 
   /**
     *处理较干净的正文内容

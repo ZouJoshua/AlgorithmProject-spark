@@ -2,7 +2,6 @@ package com.apus.nlp
 
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.clustering.LDA
-import org.apache.spark.
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.apache.spark.sql.functions._
