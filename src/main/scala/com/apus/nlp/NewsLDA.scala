@@ -35,7 +35,7 @@ object NewsLDA {
       * CheckpointInterval：迭代计算时检查点的间隔
       * Optimizer：优化计算方法，目前支持"em", "online" ，em方法更占内存，迭代次数多内存可能不够会抛出stack异常
       */
-    val lda=new LDA().setK(500).setTopicConcentration(3).setDocConcentration(3).setOptimizer("online").setCheckpointInterval(10).setMaxIter(100)
+    val lda=new LDA().setK(500).setTopicConcentration(3).setDocConcentration(3).setOptimizer("em").setCheckpointInterval(2).setMaxIter(100)
 
     val model=lda.fit(dataset)
 
