@@ -57,11 +57,21 @@ object PrepData {
         (word_id(0).trim(), word_id(1).toLong)
     }.toDF("word","wordID")
 
-    // 保存文件
     val word_save_tmp = word_UCI.groupBy("docID", "wordID").agg(count("wordID").as("tf"))
     val word_filtered = word_tfidf_UCI.drop("wordTFIDF").groupBy("docID", "wordID").agg(count("wordID").as("tf"))
     val vocab_save = vocab.sort("wordID").select("word")
 //    val vocab_save = vocab.sort(desc("wordID")).select("word")
+
+   // 生成libsvm格式数据
+    val word_libsvm_rdd = word_save_tmp.rdd.map{
+      r =>
+        val did = r.getAs[String]("docID")
+        val wid = r.getAs[Long]("wordID")
+        val tf = r.getAs[Long]("tf")
+        (did.toString, wid + ":" + tf)
+    }
+
+    val word_libsvm = word_libsvm_rdd.reduceByKey(_ + " " + _).map(r => r._1.toString + "\t" + r._2 + "\n").toDF("data")
 
     val word_save = word_save_tmp.map{
       r =>
@@ -80,9 +90,10 @@ object PrepData {
         val txt = did + "|" + wid + "|" + tf
         txt.toString
     }
-
+    // 保存文件
     word_save.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/word_uci/dt=2018-11-20")
     word_filtered_save.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/word_filtered_uci/dt=2018-11-20")
     vocab_save.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/word_vocab/dt=2018-11-20")
+    word_libsvm.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/word_libsvm/dt=2018-11-20")
   }
 }

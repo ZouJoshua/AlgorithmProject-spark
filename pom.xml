@@ -109,9 +109,18 @@
     <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-mllib -->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-mllib_2.11</artifactId>
-      <version>2.2.0</version>
-      <scope>runtime</scope>
+      <artifactId>spark-mllib_${scala.tools.version}</artifactId>
+      <version>${spark.version}</version>
+      <exclusions>
+        <exclusion>
+          <artifactId>avro-ipc</artifactId>
+          <groupId>org.apache.avro</groupId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-aws</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
 
