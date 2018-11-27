@@ -19,7 +19,7 @@ object NewsLDA {
     val sc = new SparkContext()
     import spark.implicits._
 
-    val ngramsPath = "news_content/word_libsvm/dt=2018-11-20"
+    val ngramsPath = "news_content/lda_libsvm/dt=2018-11-20"
 
     // Loads data.
     val dataset = spark.read.option("numFeatures", "15984963").format("libsvm").load(ngramsPath)
