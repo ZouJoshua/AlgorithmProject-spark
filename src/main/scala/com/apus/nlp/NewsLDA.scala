@@ -2,7 +2,6 @@ package com.apus.nlp
 
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.clustering.LDA
-import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.apache.spark.sql.functions._
 
@@ -23,7 +22,7 @@ object NewsLDA {
     val ngramsPath = "news_content/word_libsvm/dt=2018-11-20"
 
     // Loads data.
-    val dataset = spark.read.option("numFeatures", "15984962").format("libsvm").load(ngramsPath)
+    val dataset = spark.read.option("numFeatures", "15984963").format("libsvm").load(ngramsPath)
 
     //------------------------------------1 模型训练-----------------------------------------
     /**
@@ -35,7 +34,7 @@ object NewsLDA {
       * CheckpointInterval：迭代计算时检查点的间隔
       * Optimizer：优化计算方法，目前支持"em", "online" ，em方法更占内存，迭代次数多内存可能不够会抛出stack异常
       */
-    val lda=new LDA().setK(500).setTopicConcentration(3).setDocConcentration(3).setOptimizer("em").setCheckpointInterval(2).setMaxIter(100)
+    val lda=new LDA().setK(500).setTopicConcentration(3).setDocConcentration(3).setOptimizer("online").setCheckpointInterval(2).setMaxIter(100)
 
     val model=lda.fit(dataset)
 
