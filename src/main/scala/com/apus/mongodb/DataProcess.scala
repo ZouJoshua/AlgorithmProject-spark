@@ -50,7 +50,7 @@ object DataProcess {
     val tagKeywordUDF = udf{
       (content:String,keywords:Seq[String]) =>
         var tag_content = " "+content+" "
-        if(keywords.length < 1){
+        if(keywords.nonEmpty){
           keywords.foreach{
             w =>
               // 有一些特殊的词带有符号的, f***ing n****r tl;dr 等
@@ -79,16 +79,18 @@ object DataProcess {
 
     // 存储结果
 
+//    val result = {
+//      entitywords.join(unmark, Seq("article_id"))
+//        .join(articleDF,Seq("article_id"))
+//        .withColumn("article",when(col("entity_keywords").isNotNull, tagKeywordUDF(col("html"), col("entity_keywords"))).otherwise(col("html")))
+//        .drop("html")
+//    }
     val result = {
+      val nullUDF = udf((t: Seq[String]) => if(t != null) t else Seq.empty[String])
       entitywords.join(unmark, Seq("article_id"))
         .join(articleDF,Seq("article_id"))
-        .withColumn("article",when(col("entity_keywords").isNotNull, tagKeywordUDF(col("html"), col("entity_keywords"))).otherwise(col("html")))
-        .drop("html")
-    }
-    val result = {
-      entitywords.join(unmark, Seq("article_id"))
-        .join(articleDF,Seq("article_id"))
-        .withColumn("entity",when(col("entity_keywords").isNull,Seq.empty[String]))
+        .withColumn("entity",nullUDF(col("entity_keywords")))
+        .drop("entity_keywords")
         .withColumn("article",tagKeywordUDF(col("html"), col("entity")))
         .withColumnRenamed("entity","entity_keywords")
         .drop("html")
