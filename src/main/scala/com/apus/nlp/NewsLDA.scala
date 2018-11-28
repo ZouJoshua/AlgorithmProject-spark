@@ -24,6 +24,19 @@ object NewsLDA {
     // Loads data.
     val dataset = spark.read.option("numFeatures", "15984963").format("libsvm").load(ngramsPath)
 
+    import org.apache.spark.ml.linalg.SparseVector
+    dataset.head.getAs[SparseVector]("features").indices.length
+    dataset.head.getAs[SparseVector]("features").values.length
+    dataset.map{
+      r =>
+        val label = r.getAs[Double]("label")
+        val num1 = r.getAs[SparseVector]("features").indices.length
+        val num2 = r.getAs[SparseVector]("features").values.length
+        val x = if(num1 < 20) 1 else 0
+        (label, x)
+    }.toDF("x1","x2")
+
+
     //------------------------------------1 模型训练-----------------------------------------
     /**
       * k: 主题数，或者聚类中心数

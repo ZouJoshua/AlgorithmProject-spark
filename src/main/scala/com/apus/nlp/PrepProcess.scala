@@ -299,26 +299,6 @@ object PrepProcess {
 
       resultWord.toString() + AlgoConstants.VERTICAL_BAR_SEPERATOR + resultNgram.toString()
     }
-
-    // html加标签 <i class="apus-entity-words">xxx</i>
-    val tagUDF = udf{
-      (article:String, words:Seq[String]) =>
-        var tmp_art = " " + article + " "
-        words.foreach{
-          w =>
-            tmp_art = tmp_art.replaceAll("\\s(?i)" + w + "(?=\\s)", " <i class=\"apus-entity-words\">" + w + "</i> ")
-        }
-        tmp_art
-    }
-
-    // 存储结果
-    val news_result = {
-//      val seqUDF =udf((t:String) => Seq.empty[String])
-      articleDF.join(art_wiki_df, Seq("article_id"))
-        .join(Ngrams_df, Seq("article_id"))
-        .withColumn("html_tag",tagUDF(col("html"), col("entity_keywords")))
-    }
-    news_result.write.mode(SaveMode.Overwrite).save(savepath.format(dt))
     spark.stop()
   }
 }

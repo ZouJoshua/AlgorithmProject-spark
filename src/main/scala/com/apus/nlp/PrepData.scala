@@ -105,7 +105,7 @@ object PrepData {
         out
     }.toDF("docID","wordID","wordTFIDF")
 
-    // 生成文章词库
+    // 生成文章词库vocab
     val vocab_DF = spark.read.parquet(vocabPath)
     val vocab = vocab_DF.map{
       x =>
@@ -137,11 +137,11 @@ object PrepData {
         txt.toString
     }
 
-   // 生成libsvm格式数据
+   // 生成lda-libsvm格式数据
     val word_libsvm_RDD = word_save_tmp.rdd.map{
       r =>
         val did = r.getAs[String]("docID")
-        // wordID索引加1，spark默认将所以设置为0开始
+        // wordID索引加1，索引从1开始，以升序排列。加载libsvm时，特征的索引会被转换成从0开始
         val wid = r.getAs[Long]("wordID") + 1
         val tf = r.getAs[Long]("tf")
         (did.toString, wid + ":" + tf)
