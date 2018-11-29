@@ -152,6 +152,17 @@ object PrepProcess {
     }.toDF("article_id","n_grams")
     Ngrams_df.cache
 
+    def stopWordsIndex(seq: Seq[String], stopwordsSet: Set[String]): Seq[Int] = {
+      val size = seq.size
+      val array = new Array[Int](size)
+      for (i <- 0 until size) {
+        if (stopwordsSet.contains(seq(i))) {
+          array(i) = 1
+        }
+      }
+      array.toSeq
+    }
+
     // 进行ngrams分词（词性标注
 
     def getTextTokens(text: String, bcStopWords: Broadcast[Set[String]], wikiWordMap: Broadcast[Map[String, Int]], proc: FastNLPProcessor): String = {
@@ -297,7 +308,7 @@ object PrepProcess {
         resultNgram.append(ngramOut.toString())
       }
 
-      resultWord.toString() + AlgoConstants.VERTICAL_BAR_SEPERATOR + resultNgram.toString()
+      resultWord.toString() + "|" + resultNgram.toString()
     }
     spark.stop()
   }

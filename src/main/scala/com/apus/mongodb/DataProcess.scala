@@ -95,7 +95,12 @@ object DataProcess {
         .withColumnRenamed("entity","entity_keywords")
         .drop("html")
     }
-    result.write.mode(SaveMode.Overwrite).save(savePath)
+    // 过滤部分数据
+    // 1.内容非英文 2.有实体词但是未在article打上标签的数据（匹配到标题）
+//    result.filter(!$"article".contains("apus-entity-words")).filter(size($"entity_keywords") > 0)
+    val result_filtered = result.filter(!(!$"article".contains("apus-entity-words") && size($"entity_keywords") > 0))
+
+    result_filtered.write.mode(SaveMode.Overwrite).save(savePath)
     spark.stop()
   }
 }

@@ -21,8 +21,8 @@ object DBConfig {
   val password: Option[String] = None
 
   // hdfs path
-  val writeToHdfsPath = "/user/zoushuai/news_content/read_mongo_test"
-  val readFromHdfsPath = "/user/zoushuai/news_content/write_mongo_test"
+  val writeToHdfsPath = "/user/zoushuai/news_content/readmongo"
+  val readFromHdfsPath = "/user/zoushuai/news_content/writemongo"
 
   def printConfig() : Unit = {
     println(s"Connecting to MongoDB at $host:$port using collection '$readCollection' in database '$database'")

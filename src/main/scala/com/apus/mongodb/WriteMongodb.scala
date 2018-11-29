@@ -32,11 +32,11 @@ object WriteMongodb {
 
     val df = spark.read.parquet(inputPath)
 
-    val cols = Seq("article_id", "country_lan", "one_level", "two_level", "three_level",
+    val colnames = Seq("article_id", "country_lan", "one_level", "two_level", "three_level",
                 "need_double_check", "mark_level", "article_url", "title", "article",
                 "entity_keywords", "semantic_keywords")
 
-    val saveDf = df.withColumn("create_time", lit(currentTimestamp))
+    val saveDf = df.select(colnames.map(col):_*).withColumn("create_time", lit(currentTimestamp))
                     .withColumn("do_grab", lit(0))
     val num = saveDf.count()
     saveDf.write.options(Map("spark.mongodb.output.uri" -> outputUri))
