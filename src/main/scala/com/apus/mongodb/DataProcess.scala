@@ -21,21 +21,21 @@ object DataProcess {
     val entitywordsPath = "/user/zhoutong/tmp/entity_and_category"
     val unmarkPath = "/user/caifuli/news/tmp/unclassified"
     val savePath = "/user/zoushuai/news_content/writemongo/dt=%s".format(dt)
-    val newsPath = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour"
+    val articlePath = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour"
 
     // 读取匹配实体词
     val entitywords = spark.read.parquet(entitywordsPath)
 
     // 读取所有文章
     val articleDF = {
-      spark.read.option("basePath",newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
+      spark.read.option("basePath",articlePath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
         .selectExpr("resource_id as article_id","html", "country_lang as country_lan")
         .repartition(512)
         .dropDuplicates("html")
     }
 
     // 读取需人工标注数据
-    val unmarkDF = spark.read.json(unmarkPath).distinct
+    val unmarkDF = spark.read.json(unmarkPath)
     val unmark_id = unmarkDF.select(col("news_id").cast(StringType),col("resource_id"))
     val unmark = {
       val seqUDF = udf((t: String) => Seq.empty[String])
@@ -94,11 +94,12 @@ object DataProcess {
         .withColumn("article",tagKeywordUDF(col("html"), col("entity")))
         .withColumnRenamed("entity","entity_keywords")
         .drop("html")
-    }
+    }.distinct
     // 过滤部分数据
-    // 1.内容非英文 2.有实体词但是未在article打上标签的数据（匹配到标题）
+    // 1.内容非英文 2.有实体词但是未在article打上标签的数据（匹配到标题）3.过滤掉未找到关键词
 //    result.filter(!$"article".contains("apus-entity-words")).filter(size($"entity_keywords") > 0)
-    val result_filtered = result.filter(!(!$"article".contains("apus-entity-words") && size($"entity_keywords") > 0))
+    val result_filter_kw = result.filter(size($"entity_keywords") > 0 && length($"article") > 100)
+    val result_filtered = result_filter_kw.filter(!(!$"article".contains("apus-entity-words") && size($"entity_keywords") > 0))
 
     result_filtered.write.mode(SaveMode.Overwrite).save(savePath)
     spark.stop()

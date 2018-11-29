@@ -9,7 +9,7 @@ fi
 
 readhdfspath=$2
 if [ x"${readhdfspath}" = x ]; then
-   readhdfspath="/user/zoushuai/news_content/write_mongo_test"
+   readhdfspath="/user/zoushuai/news_content/writemongo"
 fi
 
 #依赖包路径
