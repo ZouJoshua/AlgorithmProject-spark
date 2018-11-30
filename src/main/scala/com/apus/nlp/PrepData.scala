@@ -1,7 +1,9 @@
 package com.apus.nlp
 
+
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -37,6 +39,7 @@ object PrepData {
     result
   }
 
+  // 转化为lda-libsvm
   def trans2labeledpoint(line: String): LabeledPoint = {
     //以第一条为例
     //ne: String = 0 2:1 1:4 6:4 7:37 8:37 9:0 10:10 11:0 12:0 ...
@@ -58,6 +61,28 @@ object PrepData {
     // LabeledPoint(label, Vectors.dense()) 密度矩阵，零值也存储
     }
 
+  // 增加索引列
+  def dfZipWithIndex(df: DataFrame,
+                     offset: Int = 1,
+                     colName: String = "id",
+                     inFront: Boolean = true
+                    ) : DataFrame = {
+    df.sqlContext.createDataFrame(
+      df.rdd.zipWithIndex.map(ln =>
+        Row.fromSeq(
+          (if (inFront) Seq(ln._2 + offset) else Seq())
+            ++ ln._1.toSeq ++
+            (if (inFront) Seq() else Seq(ln._2 + offset))
+        )
+      ),
+      StructType(
+        (if (inFront) Array(StructField(colName,LongType,false)) else Array[StructField]())
+          ++ df.schema.fields ++
+          (if (inFront) Array[StructField]() else Array(StructField(colName,LongType,false)))
+      )
+    )
+  }
+
   def main(args: Array[String]): Unit = {
 
     val spark = SparkSession.builder()
@@ -77,6 +102,9 @@ object PrepData {
     val tfidfPath = "/user/zoushuai/news_content/tfidf/dt=%s".format(dt)
 
     val docwordDF = spark.read.parquet(ngramsPath)
+
+    // 增加索引列，并增加映射
+    val docwordIndex = dfZipWithIndex(docwordDF).
 
     // 生成lightlda-docword文件（UCI格式）
     val word_UCI = docwordDF.flatMap{
