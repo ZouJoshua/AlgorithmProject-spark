@@ -1,5 +1,7 @@
 package com.apus.test
 
+import java.text.SimpleDateFormat
+
 /**
   * Created by Joshua on 2018-11-06
   */
@@ -32,6 +34,19 @@ object DBConfig {
   // hdfs path
   val operateResSavePath = "/user/zoushuai/news_content/readmongo"
   val writeArticleInfoPath = "/user/zoushuai/news_content/writemongo"
+  val oriPath = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour"
+  val entitywordsPath = "/user/zhoutong/tmp/entity_and_category"
+  val unclassifiedPath = "/user/caifuli/news/tmp/unclassified"
+
+  // date
+  val currentTimestamp = System.currentTimeMillis()
+  val sdf = new  SimpleDateFormat("yyyy-MM-dd")
+  val today = sdf.format(currentTimestamp)
+
+
+  // mark level for article
+  val marklevel = 2
+
 
   def printConfig() : Unit = {
     println(s"Connecting to MongoDB at $host:$port using collection '$readCollection' in database '$database'")
@@ -40,6 +55,7 @@ object DBConfig {
       case _ => println("not using any authentication")
     }
   }
+
   def parseArgs(args: Array[String]) = {
     val variables = scala.collection.mutable.Map.empty[String, String]
     if(args != null) {

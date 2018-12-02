@@ -19,10 +19,12 @@ object WriteMongodb {
 
     val variables = DBConfig.parseArgs(args)
     val currentTimestamp = System.currentTimeMillis()
-    val sdf = new  SimpleDateFormat("yyyy-MM-dd")
-    val today = sdf.format(currentTimestamp)
-    val inputPath = variables.getOrElse("hdfspath", DBConfig.writeArticleInfoPath)
-    val outputUri = variables.getOrElse("articleInfoUrl", DBConfig.articleInfoUrl).toString
+
+
+    val dt = variables.getOrElse("date",DBConfig.today)
+    val input = variables.getOrElse("article_info_hdfspath", DBConfig.writeArticleInfoPath)
+    val inputPath = input + "/dt=%s".format(dt)
+    val outputUri = variables.getOrElse("article_info_url", DBConfig.articleInfoUrl).toString
 
     // 读取已清洗好的数据
     val df = spark.read.parquet(inputPath)

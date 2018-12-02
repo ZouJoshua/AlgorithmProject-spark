@@ -1,13 +1,13 @@
 package com.apus.nlp
 
 
-import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
-import org.apache.spark.sql.functions._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 //import org.apache.spark.ml.linalg.Vectors
 //import org.apache.spark.ml.feature.LabeledPoint
 
@@ -104,12 +104,15 @@ object PrepData {
     val docwordDF = spark.read.parquet(ngramsPath)
 
     // 增加索引列，并增加映射
-    val docwordIndex = dfZipWithIndex(docwordDF).
+    val docwordIndex = dfZipWithIndex(docwordDF)
+    val idmapUDF = udf{(id:Int, article_id:String) => Map(id -> article_id)}
+    val docwordIndexMap = docwordIndex.withColumn("idmap", idmapUDF(col("id"),col("article_id")))
+    docwordIndexMap.cache
 
     // 生成lightlda-docword文件（UCI格式）
-    val word_UCI = docwordDF.flatMap{
+    val word_UCI = docwordIndexMap.flatMap{
       r =>
-        val docID = r.getAs[String]("article_id")
+        val docID = r.getAs[Int]("id")
         val ngrams = r.getAs[Seq[Long]]("content_ngram_idx")
         var out = Seq.empty[(String, Long)]
         for(wordID <- ngrams){
@@ -141,7 +144,7 @@ object PrepData {
         (word_id(0).trim(), word_id(1).toLong)
     }.toDF("word","wordID")
 
-    val word_save_tmp = word_UCI.groupBy("docID", "wordID").agg(count("wordID").as("tf"))
+    val word_save_tmp = word_UCI.groupBy("docID", "wordID").agg(count("wordID").as("tf")).sort("docID")
     val word_filtered = word_tfidf_UCI.drop("wordTFIDF").groupBy("docID", "wordID").agg(count("wordID").as("tf"))
     val vocab_save = vocab.sort("wordID").select("word")
 //    val vocab_save = vocab.sort(desc("wordID")).select("word")

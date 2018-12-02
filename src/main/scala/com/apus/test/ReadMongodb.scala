@@ -14,17 +14,15 @@ object ReadMongodb {
   def main(args: Array[String]): Unit = {
 
     val spark = SparkSession.builder()
-      .appName("MongoSparkConnectorIntro")
+      .appName("ReadMongoSparkConnector")
       .getOrCreate()
 
     val variables = DBConfig.parseArgs(args)
-    val currentTimestamp = System.currentTimeMillis()
-    val sdf = new  SimpleDateFormat("yyyy-MM-dd")
-    val today = sdf.format(currentTimestamp)
-    val date = variables.getOrElse("date", today)
+    val date = variables.getOrElse("date", DBConfig.today)
 
-    val inputUri = variables.getOrElse("operateResUrl", DBConfig.operateResUrl)
-    val outputPath = variables.getOrElse("outpath", DBConfig.operateResSavePath + "/dt=" + date)
+    val inputUri = variables.getOrElse("operate_res_url", DBConfig.operateResUrl)
+    val savePath = variables.getOrElse("operate_res_savepath", DBConfig.operateResSavePath)
+    val outputPath = savePath + "/dt=%s".format(date)
 
     // 从mongodb读取完成标注数据
     val df = spark.read.format("com.mongodb.spark.sql").options(
