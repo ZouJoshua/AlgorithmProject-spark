@@ -1,8 +1,6 @@
 package com.apus.mongodb
 
-import java.text.SimpleDateFormat
-
-import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 
 /**
@@ -10,28 +8,26 @@ import org.apache.spark.sql.functions._
   */
 
 object WriteMongodb {
+
   def main(args: Array[String]): Unit = {
-    val variables = DBConfig.parseArgs(args)
-
-    val currentTimestamp = System.currentTimeMillis()
-    val sdf = new  SimpleDateFormat("yyyy-MM-dd")
-    val today = sdf.format(currentTimestamp)
-
-    val inputPath = variables.getOrElse("hdfspath", DBConfig.readFromHdfsPath)
-//    val outputUri = s"mongodb://${DBConfig.host}:${DBConfig.port}/${DBConfig.database}.${DBConfig.writeCollection}"
-
-    val output = (DBConfig.userName, DBConfig.password) match {
-      case (Some(u), Some(pw)) => s"mongodb://$u:$pw@${DBConfig.host}:${DBConfig.port}/${DBConfig.database}.${DBConfig.writeCollection}"
-      case _ => s"mongodb://${DBConfig.host}:${DBConfig.port}/${DBConfig.database}.${DBConfig.writeCollection}"
-    }
-    val outputUri = variables.getOrElse("outputUrl", output).toString
 
     val spark = SparkSession.builder()
-      .appName("WriteMongoSparkConnectorIntro")
+      .appName("WriteMongoSparkConnector")
       .getOrCreate()
 
+    val variables = DBConfig.parseArgs(args)
+    val currentTimestamp = System.currentTimeMillis()
+
+
+    val dt = variables.getOrElse("date",DBConfig.today)
+    val input = variables.getOrElse("article_info_hdfspath", DBConfig.writeArticleInfoPath)
+    val inputPath = input + "/dt=%s".format(dt)
+    val outputUri = variables.getOrElse("article_info_url", DBConfig.articleInfoUrl).toString
+
+    // 读取已清洗好的数据
     val df = spark.read.parquet(inputPath)
 
+    // 选取写入mongodb的字段
     val colnames = Seq("article_id", "country_lan", "one_level", "two_level", "three_level",
                 "need_double_check", "mark_level", "article_url", "title", "article",
                 "entity_keywords", "semantic_keywords")
@@ -39,6 +35,7 @@ object WriteMongodb {
     val saveDf = df.select(colnames.map(col):_*).withColumn("create_time", lit(currentTimestamp))
                     .withColumn("do_grab", lit(0))
     val num = saveDf.count()
+    // 写入mongodb
     saveDf.write.options(Map("spark.mongodb.output.uri" -> outputUri))
       .mode("append")
       .format("com.mongodb.spark.sql")

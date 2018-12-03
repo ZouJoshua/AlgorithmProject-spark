@@ -1,36 +1,28 @@
 package com.apus.mongodb
 
-import java.text.SimpleDateFormat
-
-import org.apache.spark.sql.{SaveMode, SparkSession}
 import org.apache.spark.sql.functions._
-
+import org.apache.spark.sql.{SaveMode, SparkSession}
 
 /**
   * Created by Joshua on 2018-11-06
   */
 
 object ReadMongodb {
+
   def main(args: Array[String]): Unit = {
 
-    val variables = DBConfig.parseArgs(args)
-    val currentTimestamp = System.currentTimeMillis()
-    val sdf = new  SimpleDateFormat("yyyy-MM-dd")
-    val today = sdf.format(currentTimestamp)
-    val date = variables.getOrElse("date", today)
-
-    val input = (DBConfig.userName, DBConfig.password) match {
-      case (Some(u), Some(pw)) => s"mongodb://$u:$pw@${DBConfig.host}:${DBConfig.port}/${DBConfig.database}.${DBConfig.readCollection}"
-      case _ => s"mongodb://${DBConfig.host}:${DBConfig.port}/${DBConfig.database}.${DBConfig.readCollection}"
-    }
-    val inputUri = variables.getOrElse("inputUrl", input)
-//    val inputUri = s"mongodb://${DBConfig.host}:${DBConfig.port}/${DBConfig.database}.${DBConfig.readCollection}"
-    val outputPath = variables.getOrElse("outpath", DBConfig.writeToHdfsPath + "/dt=" + date)
-
     val spark = SparkSession.builder()
-      .appName("MongoSparkConnectorIntro")
+      .appName("ReadMongoSparkConnector")
       .getOrCreate()
 
+    val variables = DBConfig.parseArgs(args)
+    val date = variables.getOrElse("date", DBConfig.today)
+
+    val inputUri = variables.getOrElse("operate_res_url", DBConfig.operateResUrl)
+    val savePath = variables.getOrElse("operate_res_savepath", DBConfig.operateResSavePath)
+    val outputPath = savePath + "/dt=%s".format(date)
+
+    // 从mongodb读取完成标注数据
     val df = spark.read.format("com.mongodb.spark.sql").options(
       Map("spark.mongodb.input.uri" -> inputUri,
         "spark.mongodb.input.partitioner" -> "MongoPaginateBySizePartitioner",
@@ -44,7 +36,6 @@ object ReadMongodb {
 
     val originDf = df.select(df_list.map(col): _*)
     val num = originDf.count()
-//    println(originDf)
 
     originDf.repartition(1).write.mode(SaveMode.Overwrite).parquet(outputPath)
     println("\nSuccessfully write %1$s data to hdfs".format(num))
