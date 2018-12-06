@@ -35,7 +35,7 @@ object DBConfig {
   val operateResSavePath = "/user/zoushuai/news_content/readmongo"
   val writeArticleInfoPath = "/user/zoushuai/news_content/writemongo"
   val oriPath = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour"
-  val entitywordsPath = "/user/zhoutong/tmp/entity_and_category"
+  val entitywordsPath = "/user/zhoutong/tmp/NGramDF_articleID_and_keywords"
   val unclassifiedPath = "/user/caifuli/news/tmp/unclassified"
 
   // date
@@ -43,10 +43,8 @@ object DBConfig {
   val sdf = new  SimpleDateFormat("yyyy-MM-dd")
   val today = sdf.format(currentTimestamp)
 
-
   // mark level for article
   val marklevel = 2
-
 
   def printConfig() : Unit = {
     println(s"Connecting to MongoDB at $host:$port using collection '$readCollection' in database '$database'")

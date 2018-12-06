@@ -38,6 +38,7 @@ object WriteMongodb {
     // 写入mongodb
     saveDf.write.options(Map("spark.mongodb.output.uri" -> outputUri))
       .mode("append")
+//      .mode("overwrite")
       .format("com.mongodb.spark.sql")
       .save()
     println("\nSuccessfully write %1$s data to mongodb".format(num))

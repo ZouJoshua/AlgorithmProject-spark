@@ -3,6 +3,10 @@ package com.apus.mongodb
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.jsoup.Jsoup
+import org.jsoup.nodes.{Element, Entities, TextNode}
+
+
 
 /**
   * Created by Joshua on 2018-11-28
@@ -20,7 +24,7 @@ object ArticleInfoProcess {
     val variables = DBConfig.parseArgs(args)
 
     val dt = variables.getOrElse("date", DBConfig.today)
-    val entitywordsPath = variables.getOrElse("entity_category_path",DBConfig.entitywordsPath)
+    val entitywordsPath = variables.getOrElse("entity_category_path",DBConfig.entitywordsPath + "/dt=2018-11-2[2-6]")
     val unmarkPath = variables.getOrElse("unclassified_path", DBConfig.unclassifiedPath)
     val artPath = variables.getOrElse("article_info_hdfspath", DBConfig.writeArticleInfoPath)
     val articlePath = DBConfig.oriPath
@@ -28,8 +32,8 @@ object ArticleInfoProcess {
 
     val savePath = artPath + "dt=%s".format(dt)
 
-    // 读取匹配实体词
-    val entitywords = spark.read.parquet(entitywordsPath)
+    // 读取匹配实体词(已计算完500w文章的关键词)
+    val entitywords = spark.read.option("basePath", DBConfig.entitywordsPath).parquet(entitywordsPath)
 
     // 读取原始数据(默认22日-26日全部500W+文章)
     val articleDF = {
@@ -51,34 +55,68 @@ object ArticleInfoProcess {
         .withColumn("semantic_keywords",seqUDF(lit(" ")))
     }
 
-    // html加标签 <i class="apus-entity-words">xxx</i>
-    val tagKeywordUDF = udf{
-      (content:String,keywords:Seq[String]) =>
-        var tag_content = " "+content+" "
+    // html加标签 <i class="apus-entity-words">xxx</i> 用正则替换效率低
+//    val tagKeywordUDF = udf{
+//      (content:String,keywords:Seq[String]) =>
+//        var tag_content = " "+content+" "
+//        if(keywords.nonEmpty){
+//          keywords.foreach{
+//            w =>
+//              // 有一些特殊的词带有符号的, f***ing n****r tl;dr 等
+//              val w_clean = w.map{
+//                a=>
+//                  if ((a >= 65 && a <= 90) || (a >= 97 && a <= 122) || (a>=48 && a<=57)){
+//                    // 字符是大小写字母或数字
+//                    a
+//                  }else "\\\\"+a
+//              }.mkString("")
+//              // 匹配 '>','<'里面的内容，防止将html标签里的内容替换掉
+//              tag_content = tag_content.replaceAll("(?<=>[^<]{0,1000}[^\\p{L}])(?i)("+w_clean+")(?-i)(?=[^\\p{L}][^>]{0,1000}<)","<i class=\"apus-entity-words\"> "+w+" </i>")
+//          }
+//        } else {tag_content = content}
+//        tag_content
+//    }
+
+    // 解析html，text加上apus标签后，再拼接成html
+    val tagMarkUDF = udf{
+      (html:String,keywords:Seq[String]) =>
+        var tag_content = " "+html+" "
         if(keywords.nonEmpty){
-          keywords.foreach{
-            w =>
-              // 有一些特殊的词带有符号的, f***ing n****r tl;dr 等
-              val w_clean = w.map{
-                a=>
-                  if ((a >= 65 && a <= 90) || (a >= 97 && a <= 122) || (a>=48 && a<=57)){
-                    // 字符是大小写字母或数字
-                    a
-                  }else "\\\\"+a
-              }.mkString("")
-              tag_content = tag_content.replaceAll("(?<=[^\\p{L}])(?i)("+w_clean+")(?-i)(?=[^\\p{L}])","<i class=\"apus-entity-words\"> "+w+" </i>")
+//          Entities.EscapeMode.base.getMap().clear()
+          val doc = Jsoup.parse(tag_content)
+          val allElements = doc.body().getAllElements.toArray.map(_.asInstanceOf[Element])
+          for(i <- allElements){
+            val tnList = i.textNodes().toArray().map(_.asInstanceOf[TextNode])
+            for(tn <- tnList) {
+              var ori_text = " " + tn.text + " "
+              keywords.foreach{
+                w =>
+                  // 有一些特殊的词带有符号的, f***ing n****r tl;dr 等
+                  val w_clean = w.map{
+                    a=>
+                      if("!\"$()*+.[]\\^{}|".contains(a)){
+                        "\\\\" + a
+                      } else a
+                  }.mkString("")
+                  // 匹配 '>','<'里面的内容，防止将html标签里的内容替换掉
+                  ori_text = ori_text.replaceAll("(?<=[^\\p{L}])(?i)("+w_clean+")(?-i)(?=[^\\p{L}])","<i class=\"apus-entity-words\"> "+w+" </i>")
+              }
+              tn.text(ori_text)
+            }
           }
-        } else {tag_content = content}
+          tag_content = doc.body().children().toString.replace("&lt;i class=\"apus-entity-words\"&gt;","<i class=\"apus-entity-words\">").replace("&lt;/i&gt;","</i>")
+          tag_content
+        } else {tag_content = html}
         tag_content
     }
 
     val result = {
       val nullUDF = udf((t: Seq[String]) => if(t != null) t else Seq.empty[String])
-      entitywords.join(unmark, Seq("article_id"))
+      unmark.join(entitywords, Seq("article_id"))
         .join(articleDF,Seq("article_id"))
         .withColumn("entity",nullUDF(col("entity_keywords")))
         .drop("entity_keywords")
-        .withColumn("article",tagKeywordUDF(col("html"), col("entity")))
+        .withColumn("article",tagMarkUDF(col("html"), col("entity")))
         .withColumnRenamed("entity","entity_keywords")
         .drop("html")
     }.distinct
