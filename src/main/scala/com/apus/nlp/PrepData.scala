@@ -102,15 +102,12 @@ object PrepData {
     val ngramsPath = "/user/zoushuai/news_content/docword"
     // val ngramsPath = "/user/zoushuai/news_content/docword/dt=%s".format(dt)
     val vocabPath = "/user/zoushuai/news_content/vocab/dt=%s".format(dt)
-    val word_vocab_AllPath = "news_content/word_vocab/all"
     // 22-26日所有词汇
     val vocabAllPath = "/user/zoushuai/news_content/vocab/all"
+    val word_vocab_AllPath = "news_content/word_vocab/all"
     // 22-24日分词tfidf值
     val tfidfPath = "/user/zoushuai/news_content/tfidf/dt=%s".format(dt)
     val tfidfAllPath = "/user/zoushuai/news_content/tfidf/all"
-    // val docwordDF = spark.read.parquet(ngramsPath)  // 单日计算
-    val docwordDF = spark.read.option("basePath", ngramsPath).parquet("/user/zoushuai/news_content/docword/dt=2018-11-2[2-6]")
-
 
     //------------------------------------ 2 生成文章词库vocab -----------------------------------------
     //    val vocab_DF = spark.read.parquet(vocabPath)
@@ -160,24 +157,29 @@ object PrepData {
     lightlda_docword_filtered.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/lightlda_docword_filtered/dt=2018-11-20")
 
     // 22-26日所有tfidf
-    val docword_tfidf_allDF = spark.read.parquet(tfidfAllPath)
-      .withColumnRenamed("word","wordID")
-      .withColumnRenamed("idf","wordTFIDF")
+    val docword_tfidf_allDF = {
+      spark.read.parquet(tfidfAllPath)
+        .withColumnRenamed("word","wordID")
+        .withColumnRenamed("idf","wordTFIDF")
+    }
 
     //------------------------------------ 3 进行词筛选 -----------------------------------------
     // 进行词筛选（选出每篇文章长度大于300，命中词大于15个的）
+
+    // val docwordDF = spark.read.parquet(ngramsPath)  // 单日计算
+    val docwordDF = spark.read.option("basePath", ngramsPath).parquet("/user/zoushuai/news_content/docword/dt=2018-11-2[2-6]")
     val docwordFiltered = {
       docwordDF
         .selectExpr("article_id", "article", "content_ngram_idx", "size(content_ngram_idx) as gram_size", "length(article) as article_length")
-        .filter("gram_size > 30 and gram_size < 200")
+        .filter("gram_size > 50 and gram_size < 150")
         .filter("article_length > 500")
     }
-    // 过滤掉tfidf值较大和较小的
+    // 过滤掉tfidf值较大和较小的(查看vocab的词)
     val vocab_tfidf = vocab.join(docword_tfidf_allDF,Seq("wordID"))
 
     // 增加索引列，并增加docid映射
-    val docwordIndex = dfZipWithIndex(docwordDF)
-    val idmapUDF = udf{(id:Int, article_id:String) => Map(id -> article_id)}
+    val docwordIndex = dfZipWithIndex(docwordFiltered)
+    val idmapUDF = udf{(id:Long, article_id:String) => Map(id -> article_id)}
     val docwordIndexMap = docwordIndex.withColumn("idmap", idmapUDF(col("id"),col("article_id")))
     docwordIndexMap.cache
 
@@ -185,7 +187,7 @@ object PrepData {
     // 生成lightlda-docword文件（UCI格式）
     val word_UCI = docwordIndexMap.flatMap{
       r =>
-        val docID = r.getAs[Int]("id")
+        val docID = r.getAs[Long]("id")
         val ngrams = r.getAs[Seq[Long]]("content_ngram_idx")
         var out = Seq.empty[(String, Long)]
         for(wordID <- ngrams){
@@ -193,7 +195,7 @@ object PrepData {
         }
         out
     }.toDF("docID","wordID")
-    val word_save_tmp = word_UCI.groupBy("docID", "wordID").agg(count("wordID").as("tf")).sort("docID")
+    val word_save_tmp = word_UCI.groupBy("docID", "wordID").agg(count("wordID").as("tf")).sort("docID","wordID")
     // 生成lightlda-docword文件
     val lightlda_docword = word_save_tmp.map{
       r =>
@@ -203,7 +205,7 @@ object PrepData {
         val txt = did + "|" + wid + "|" + tf
         txt.toString
     }
-    lightlda_docword.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/lightlda_docword/dt=%s".format(dt))
+    lightlda_docword.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/lightlda_docword/all_v2")
 
     /*
     //------------------------------------ 5 生成lda-libsvm格式数据 -----------------------------------------
