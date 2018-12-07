@@ -95,20 +95,93 @@ object PrepData {
       * lightlda数据预处理
       * lda数据预处理
       */
-    val dt = "2018-11-20"
-    val ngramsPath = "/user/zoushuai/news_content/docword/dt=%s".format(dt)
+
+    //------------------------------------ 1 路径设置 -----------------------------------------
+    val dt = "2018-11-22"
+    // 22-26日分词
+    val ngramsPath = "/user/zoushuai/news_content/docword"
+    // val ngramsPath = "/user/zoushuai/news_content/docword/dt=%s".format(dt)
     val vocabPath = "/user/zoushuai/news_content/vocab/dt=%s".format(dt)
-    val vocabAllPath = "/user/zoushuai/news_content/vocab/all_v1"
+    val word_vocab_AllPath = "news_content/word_vocab/all"
+    // 22-26日所有词汇
+    val vocabAllPath = "/user/zoushuai/news_content/vocab/all"
+    // 22-24日分词tfidf值
     val tfidfPath = "/user/zoushuai/news_content/tfidf/dt=%s".format(dt)
+    val tfidfAllPath = "/user/zoushuai/news_content/tfidf/all"
+    // val docwordDF = spark.read.parquet(ngramsPath)  // 单日计算
+    val docwordDF = spark.read.option("basePath", ngramsPath).parquet("/user/zoushuai/news_content/docword/dt=2018-11-2[2-6]")
 
-    val docwordDF = spark.read.parquet(ngramsPath)
 
-    // 增加索引列，并增加映射
+    //------------------------------------ 2 生成文章词库vocab -----------------------------------------
+    //    val vocab_DF = spark.read.parquet(vocabPath)
+    //    val vocab = vocab_DF.map{
+    //      x =>
+    //        val word_id = x.getAs[String]("value").split("\\t")
+    //        (word_id(0).trim(), word_id(1).toLong)
+    //    }.toDF("word","wordID")
+
+    val vocab_DF = spark.read.textFile(vocabAllPath)
+    val vocab = vocab_DF.map{
+      x =>
+        val word_and_id = x.split("\t")
+        (word_and_id(0).trim(), word_and_id(1).toLong)
+    }.toDF("word","wordID")
+    val vocab_save = vocab.sort("wordID").select("word")
+    //    val vocab_save = vocab.sort(desc("wordID")).select("word")
+    // 保存文章词库
+    vocab_save.repartition(1).write.mode(SaveMode.Overwrite).text(word_vocab_AllPath)
+
+    //------------------------------------ 2 读取tfidf -----------------------------------------
+
+    // 22-24日第一次时做法
+    // 取tf_idf值大于某一阈值的词
+    val docword_tfidf_DF = spark.read.parquet(tfidfPath)
+    val word_tfidf_UCI = docword_tfidf_DF.flatMap{
+      r =>
+        val docID = r.getAs[String]("article_id")
+        //        val tfidf_ngrams = r.getAs[Seq[(Long,Double)]]("tf_Mul_idf")
+        val tfidf_ngrams:Seq[(Long,Double)] = r.getAs[Seq[Row]]("tf_Mul_idf").map(x => {(x.getLong(0), x.getDouble(1))})
+        var out = Seq.empty[(String, Long, Double)]
+        for(tfidf <- tfidf_ngrams){
+          out = out :+ (docID.toString, tfidf._1, tfidf._2)
+        }
+        out
+    }.toDF("docID","wordID","wordTFIDF")
+    val word_filtered = word_tfidf_UCI.drop("wordTFIDF").groupBy("docID", "wordID").agg(count("wordID").as("tf"))
+    val lightlda_docword_filtered = word_filtered.map{
+      r =>
+        val did = r.getAs[String]("docID")
+        val wid = r.getAs[Long]("wordID")
+        val tf = r.getAs[Long]("tf")
+        val txt = did + "|" + wid + "|" + tf
+        txt.toString
+    }
+    // 保存文件lightlda
+    lightlda_docword_filtered.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/lightlda_docword_filtered/dt=2018-11-20")
+
+    // 22-26日所有tfidf
+    val docword_tfidf_allDF = spark.read.parquet(tfidfAllPath)
+      .withColumnRenamed("word","wordID")
+      .withColumnRenamed("idf","wordTFIDF")
+
+    //------------------------------------ 3 进行词筛选 -----------------------------------------
+    // 进行词筛选（选出每篇文章长度大于300，命中词大于15个的）
+    val docwordFiltered = {
+      docwordDF
+        .selectExpr("article_id", "article", "content_ngram_idx", "size(content_ngram_idx) as gram_size", "length(article) as article_length")
+        .filter("gram_size > 30 and gram_size < 200")
+        .filter("article_length > 500")
+    }
+    // 过滤掉tfidf值较大和较小的
+    val vocab_tfidf = vocab.join(docword_tfidf_allDF,Seq("wordID"))
+
+    // 增加索引列，并增加docid映射
     val docwordIndex = dfZipWithIndex(docwordDF)
     val idmapUDF = udf{(id:Int, article_id:String) => Map(id -> article_id)}
     val docwordIndexMap = docwordIndex.withColumn("idmap", idmapUDF(col("id"),col("article_id")))
     docwordIndexMap.cache
 
+    //------------------------------------ 4 生成lightlda-docword文件 -----------------------------------------
     // 生成lightlda-docword文件（UCI格式）
     val word_UCI = docwordIndexMap.flatMap{
       r =>
@@ -120,35 +193,7 @@ object PrepData {
         }
         out
     }.toDF("docID","wordID")
-
-    // 取tf_idf值大于某一阈值的词
-    val docword_tfidf_DF = spark.read.parquet(tfidfPath)
-
-    val word_tfidf_UCI = docword_tfidf_DF.flatMap{
-      r =>
-        val docID = r.getAs[String]("article_id")
-//        val tfidf_ngrams = r.getAs[Seq[(Long,Double)]]("tf_Mul_idf")
-        val tfidf_ngrams:Seq[(Long,Double)] = r.getAs[Seq[Row]]("tf_Mul_idf").map(x => {(x.getLong(0), x.getDouble(1))})
-        var out = Seq.empty[(String, Long, Double)]
-        for(tfidf <- tfidf_ngrams){
-          out = out :+ (docID.toString, tfidf._1, tfidf._2)
-        }
-        out
-    }.toDF("docID","wordID","wordTFIDF")
-
-    // 生成文章词库vocab
-    val vocab_DF = spark.read.parquet(vocabPath)
-    val vocab = vocab_DF.map{
-      x =>
-        val word_id = x.getAs[String]("value").split("\\t")
-        (word_id(0).trim(), word_id(1).toLong)
-    }.toDF("word","wordID")
-
     val word_save_tmp = word_UCI.groupBy("docID", "wordID").agg(count("wordID").as("tf")).sort("docID")
-    val word_filtered = word_tfidf_UCI.drop("wordTFIDF").groupBy("docID", "wordID").agg(count("wordID").as("tf"))
-    val vocab_save = vocab.sort("wordID").select("word")
-//    val vocab_save = vocab.sort(desc("wordID")).select("word")
-
     // 生成lightlda-docword文件
     val lightlda_docword = word_save_tmp.map{
       r =>
@@ -158,17 +203,11 @@ object PrepData {
         val txt = did + "|" + wid + "|" + tf
         txt.toString
     }
+    lightlda_docword.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/lightlda_docword/dt=%s".format(dt))
 
-    val lightlda_docword_filtered = word_filtered.map{
-      r =>
-        val did = r.getAs[String]("docID")
-        val wid = r.getAs[Long]("wordID")
-        val tf = r.getAs[Long]("tf")
-        val txt = did + "|" + wid + "|" + tf
-        txt.toString
-    }
-
-   // 生成lda-libsvm格式数据
+    /*
+    //------------------------------------ 5 生成lda-libsvm格式数据 -----------------------------------------
+    // 生成lda-libsvm格式数据
     val word_libsvm_RDD = word_save_tmp.rdd.map{
       r =>
         val did = r.getAs[String]("docID")
@@ -183,21 +222,17 @@ object PrepData {
     val word_libsvm_vectors = word_libsvm.map(line => trans2labeledpoint(line.getAs[String]("data"))).toDF("label","features")
     val word_labeledpoint_RDD = word_libsvm.rdd.map(line => trans2labeledpoint(line.getAs[String]("data")))
 
-    // 保存文件lightlda
-    lightlda_docword.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/lightlda_docword/dt=%s".format(dt))
-    lightlda_docword_filtered.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/lightlda_docword_filtered/dt=2018-11-20")
-    // 保存文章词库
-    vocab_save.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/word_vocab/dt=2018-11-20")
-    // 保存lda-libsvm
+    /* 保存lda-libsvm */
     word_libsvm_sorted.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/lda_libsvm/dt=2018-11-20")
 
-    // 向量格式写数据
+    /* 向量格式写数据 */
     // spark2.2.0 ml库有bug  java.util.NoSuchElementException: key not found: numFeatures
     // spark2.2.1 和2.3.0修复此bug
     word_libsvm_vectors.repartition(1).write.format("libsvm").mode(SaveMode.Overwrite).save("news_content/lda_libsvm/dt=2018-11-20")
 
-    // 保存libsvm格式文件
+    /* 保存libsvm格式文件 */
     // spark2.2.0 mllib库 可以保存成功
     MLUtils.saveAsLibSVMFile(word_labeledpoint_RDD,"news_content/lda_libsvm/dt=2018-11-20")
+    */
   }
 }
