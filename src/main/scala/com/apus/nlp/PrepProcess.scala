@@ -17,7 +17,7 @@ object PrepProcess {
   /**
     *处理较干净的正文内容
     * 1.二次清洗（清洗标点、大小写等）
-    * 2.分词（ngrams）
+    * 2.分词（分句子取ngrams）
     * 3.找wiki关联实体词
     */
 
@@ -94,7 +94,7 @@ object PrepProcess {
             .replaceAll("\\s+", " ")
             .split(" ").toSeq
         }
-        val wordsNgram = get_Ngrams(split_word, 1, 4).toSet
+        val wordsNgram = get_Ngrams(split_word).toSet
         var hit_dict: List[String] = List()
 //        var hit_dict = Seq.empty[String]
         for(word <- wordsNgram){
@@ -229,7 +229,7 @@ object PrepProcess {
         })
 
         /** ngram组合词 **/
-        val ngramList = get_Ngrams(lemmaList, 1, 4)
+        val ngramList = get_Ngrams(lemmaList)
         val wordsOut = new StringBuilder()
         val ngramOut = new StringBuilder()
 

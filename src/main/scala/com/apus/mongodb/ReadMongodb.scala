@@ -30,11 +30,14 @@ object ReadMongodb {
         "spark.mongodb.input.partitionerOptions.partitionKey"  -> "_id",
         "spark.mongodb.input.partitionerOptions.partitionSizeMB"-> "32"))
       .load()
-
+    //all
+//    val df_list = List("article_doc_id", "article_id", "choose_keywords",
+//                  "manual_keywords", "is_right", "one_level", "two_level", "three_level",
+//                  "op_id", "op_name", "op_time", "server_time")
+    //test
     val df_list = List("article_doc_id", "article_id", "choose_keywords",
-                  "manual_keywords", "is_right", "one_level", "two_level", "three_level",
-                  "op_id", "op_name", "op_time", "server_time")
-
+                "is_right", "one_level", "two_level", "op_time", "server_time")
+    println(df.show)
     val originDf = df.select(df_list.map(col): _*)
     val num = originDf.count()
 
