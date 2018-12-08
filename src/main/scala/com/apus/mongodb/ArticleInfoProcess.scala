@@ -49,10 +49,10 @@ object ArticleInfoProcess {
     val unmark = {
       val seqUDF = udf((t: String) => Seq.empty[String])
       unmarkDF.withColumn("article_id", concat_ws("", unmark_id.schema.fieldNames.map(col): _*))
-        .selectExpr("article_id", "title","url as article_url", "top_category as one_level", "sub_category as two_level", "third_category as three_level")
+        .selectExpr("article_id", "title","url as article_url", "top_category as one_level", "sub_category as two_level", "third_category as three_level", "length(content) as article_len","length(html) as html_len")
         .withColumn("need_double_check",lit(0))
-        .withColumn("mark_level", lit(mark_level))
-        .withColumn("semantic_keywords",seqUDF(lit(" ")))
+        .withColumn("semantic_keywords",seqUDF(lit("")))
+        .filter("article_len > 100 or html_len > 100") // 增加过滤文章内容长度小于100字符的
     }
 
     // html加标签 <i class="apus-entity-words">xxx</i> 用正则替换效率低
