@@ -36,12 +36,17 @@ object ArticleInfoProcess {
     val entitywords = spark.read.option("basePath", DBConfig.entitywordsPath).parquet(entitywordsPath)
 
     // 读取原始数据(默认22日-26日全部500W+文章)
-    val articleDF = {
+
+    val getcontentUDF = udf{(html:String) => Jsoup.parse(html).text()}
+    val articleAllDF = {
       spark.read.option("basePath",articlePath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
         .selectExpr("resource_id as article_id","html", "country_lang as country_lan")
         .repartition(512)
         .dropDuplicates("html")
     }
+    val articledf = articleAllDF.withColumn("content", getcontentUDF(col("html")))
+    articledf.cache
+    val articleDF = articledf.filter("length(content) > 100")
 
     // 读取需人工标注数据
     val unmarkDF = spark.read.json(unmarkPath)
@@ -49,7 +54,7 @@ object ArticleInfoProcess {
     val unmark = {
       val seqUDF = udf((t: String) => Seq.empty[String])
       unmarkDF.withColumn("article_id", concat_ws("", unmark_id.schema.fieldNames.map(col): _*))
-        .selectExpr("article_id", "title","url as article_url", "top_category as one_level", "sub_category as two_level", "third_category as three_level", "length(content) as article_len","length(html) as html_len")
+        .selectExpr("article_id", "title", "url as article_url", "top_category as one_level", "sub_category as two_level", "third_category as three_level", "length(content) as article_len","length(html) as html_len")
         .withColumn("need_double_check",lit(0))
         .withColumn("semantic_keywords",seqUDF(lit("")))
         .filter("article_len > 100 or html_len > 100") // 增加过滤文章内容长度小于100字符的
@@ -112,7 +117,7 @@ object ArticleInfoProcess {
 
     val result = {
       val nullUDF = udf((t: Seq[String]) => if(t != null) t else Seq.empty[String])
-      unmark.join(entitywords, Seq("article_id"))
+      unmark.drop("article_len", "html_len").join(entitywords, Seq("article_id"))
         .join(articleDF,Seq("article_id"))
         .withColumn("entity",nullUDF(col("entity_keywords")))
         .drop("entity_keywords")
@@ -127,6 +132,8 @@ object ArticleInfoProcess {
     val result_filtered = result_filter_kw.filter(!(!$"article".contains("apus-entity-words") && size($"entity_keywords") > 0))
 
     result_filtered.write.mode(SaveMode.Overwrite).save(savePath)
+    // 添加相似去重检查
+    result_filtered.select("article_id", "content").repartition(1).write.format("json").mode(SaveMode.Overwrite).save("news_content/deduplication/dt=2018-11-29")
     spark.stop()
   }
 }
