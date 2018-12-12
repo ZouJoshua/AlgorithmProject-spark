@@ -44,7 +44,7 @@ object ArticleInfoProcess {
         .repartition(512)
         .dropDuplicates("html")
     }
-    val articledf = articleAllDF.withColumn("content", getcontentUDF(col("html")))
+    val articledf = articleAllDF.withColumn("content", getcontentUDF(col("html"))).dropDuplicates("content")
     articledf.cache
     val articleDF = articledf.filter("length(content) > 100")
 
@@ -132,8 +132,16 @@ object ArticleInfoProcess {
     val result_filtered = result_filter_kw.filter(!(!$"article".contains("apus-entity-words") && size($"entity_keywords") > 0))
 
     result_filtered.write.mode(SaveMode.Overwrite).save(savePath)
-    // 添加相似去重检查
+    // 添加相似去重检查写入文件
     result_filtered.select("article_id", "content").repartition(1).write.format("json").mode(SaveMode.Overwrite).save("news_content/deduplication/dt=2018-11-29")
+
+    // 重新去重写入
+    // TODO:需要先计算重复id
+    val dupdf = spark.read.json("news_content/dropdups")
+    val rewritedf = spark.read.parquet(savePath)
+    val resavedf = rewritedf.join(dupdf,Seq("article_id"),"left").filter("dupmark is null").dropDuplicates("title")
+    resavedf.write.mode(SaveMode.Overwrite).save(savePath)
+
     spark.stop()
   }
 }
