@@ -100,11 +100,15 @@ object ArticleInfoProcess {
                   val w_clean = w.map{
                     a=>
                       if("!\"$()*+.[]\\^{}|".contains(a)){
-                        "\\\\" + a
+                        "\\" + a
+//                        "\\\\" + a
                       } else a
                   }.mkString("")
                   // 匹配 '>','<'里面的内容，防止将html标签里的内容替换掉
-                  ori_text = ori_text.replaceAll("(?<=[^\\p{L}])(?i)("+w_clean+")(?-i)(?=[^\\p{L}])","<i class=\"apus-entity-words\"> "+w+" </i>")
+                  val toReplace_ = "<i class=\"apus-entity-words\"> "+w+" </i>"
+                  val toReplace = java.util.regex.Matcher.quoteReplacement(toReplace_)
+                  ori_text = ori_text.replaceAll("(?<=[^\\p{L}])("+w_clean+")(?=[^\\p{L}])", toReplace)
+//                  ori_text = ori_text.replaceAll("(?<=[^\\p{L}])(?i)("+w_clean+")(?-i)(?=[^\\p{L}])","<i class=\"apus-entity-words\"> "+w+" </i>")
               }
               tn.text(ori_text)
             }
@@ -132,6 +136,7 @@ object ArticleInfoProcess {
     val result_filtered = result_filter_kw.filter(!(!$"article".contains("apus-entity-words") && size($"entity_keywords") > 0))
 
     result_filtered.write.mode(SaveMode.Overwrite).save(savePath)
+
     // 添加相似去重检查写入文件
     result_filtered.select("article_id", "content").repartition(1).write.format("json").mode(SaveMode.Overwrite).save("news_content/deduplication/dt=2018-11-29")
 
