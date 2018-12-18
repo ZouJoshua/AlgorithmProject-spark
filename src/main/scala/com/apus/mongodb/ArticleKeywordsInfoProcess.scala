@@ -32,7 +32,7 @@ object ArticleKeywordsInfoProcess {
     val articleAllDF = {
       val seqUDF = udf((t: String) => Seq.empty[String])
       spark.read.option("basePath",newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-12-1[3-4]")
-        .selectExpr("resource_id as article_id", "html", "country_lang as country_lan", "category", "title", "url as article_url", "'entertainment_keywords' as one_level", "'' as two_level", "'' as three_levle")
+        .selectExpr("resource_id as article_id", "html", "country_lang as country_lan", "category", "title", "url as article_url", "'' as one_level", "'' as two_level", "'' as three_level")
         .withColumn("need_double_check",lit(0))
         .withColumn("semantic_keywords",seqUDF(lit("")))
         .repartition(512)
@@ -88,7 +88,7 @@ object ArticleKeywordsInfoProcess {
         .withColumn("article",tagMarkUDF(col("html"), col("entity")))
         .withColumnRenamed("entity","entity_keywords")
         .drop("html")
-    }.distinct
+    }.toDF().distinct
 
     // 过滤部分数据
     // 1.内容非英文 2.有实体词但是未在article打上标签的数据（匹配到标题）3.过滤掉未找到关键词
@@ -97,6 +97,16 @@ object ArticleKeywordsInfoProcess {
 
     result_filtered.write.mode(SaveMode.Overwrite).save(savePath)
 
+    // 添加相似去重检查写入文件
+    result_filtered.select("article_id", "content").repartition(1).write.format("json").mode(SaveMode.Overwrite).save("news_content/deduplication/dt=2018-11-29")
+
+    // 重新去重写入
+    // TODO:需要先计算重复id
+    val dupdf = spark.read.json("news_content/dropdups/dropdups.all_17_5")
+    val rewritedf = spark.read.parquet(savePath)
+    val resavedf = rewritedf.join(dupdf,Seq("article_id"),"left").filter("dupmark is null")
+//      .dropDuplicates("title")
+    resavedf.write.mode(SaveMode.Overwrite).save(savePath)
 
   }
 }

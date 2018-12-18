@@ -123,10 +123,12 @@ object PrepData {
         val word_and_id = x.split("\t")
         (word_and_id(0).trim(), word_and_id(1).toLong)
     }.toDF("word","wordID")
-    val vocab_save = vocab.sort("wordID").select("word")
+//    val vocab_save = vocab.sort("wordID").select("word")
+    val vocab_save = vocab.repartition(1).sort("wordID").select("word").repartition(1)
+    vocab_save.cache
     //    val vocab_save = vocab.sort(desc("wordID")).select("word")
     // 保存文章词库
-    vocab_save.repartition(1).write.mode(SaveMode.Overwrite).text(word_vocab_AllPath)
+    vocab_save.write.mode(SaveMode.Overwrite).text(word_vocab_AllPath)
 
     //------------------------------------ 2 读取tfidf -----------------------------------------
 
@@ -168,11 +170,21 @@ object PrepData {
 
     // val docwordDF = spark.read.parquet(ngramsPath)  // 单日计算
     val docwordDF = spark.read.option("basePath", ngramsPath).parquet("/user/zoushuai/news_content/docword/dt=2018-11-2[2-6]")
-    val docwordFiltered = {
+    val docwordAll = {
       docwordDF
-        .selectExpr("article_id", "article", "content_ngram_idx", "size(content_ngram_idx) as gram_size", "length(article) as article_length")
-        .filter("gram_size > 50 and gram_size < 150")
-        .filter("article_length > 500")
+        .selectExpr("article_id", "article_parsed as article", "content_ngram_idx", "size(content_ngram_idx) as gram_size", "length(article_parsed) as article_length")
+    }
+    val ngram_size = docwordAll.rdd.map{
+      r =>
+        val id  = r.getAs[String]("article_id")
+        val ngram = r.getAs[Seq[Long]]("content_ngram_idx").toSet.size
+        (id,ngram)
+    }.toDF("article_id", "ngram_size_new")
+
+    val  docwordFiltered  = {
+      docwordAll.join(ngram_size, Seq("article_id"))
+        .filter("article_length > 300")
+        .filter("ngram_size_new > 20 and ngram_size_new < 200")
     }
     // 过滤掉tfidf值较大和较小的(查看vocab的词)
     val vocab_tfidf = vocab.join(docword_tfidf_allDF,Seq("wordID"))
@@ -189,23 +201,24 @@ object PrepData {
       r =>
         val docID = r.getAs[Long]("id")
         val ngrams = r.getAs[Seq[Long]]("content_ngram_idx")
-        var out = Seq.empty[(String, Long)]
+        var out = Seq.empty[(Long, Long)]
         for(wordID <- ngrams){
-          out = out :+ (docID.toString,wordID)
+          out = out :+ (docID,wordID)
         }
         out
     }.toDF("docID","wordID")
-    val word_save_tmp = word_UCI.groupBy("docID", "wordID").agg(count("wordID").as("tf")).sort("docID","wordID")
+    val word_save_tmp = word_UCI.groupBy("docID", "wordID").agg(count("wordID").as("tf")).sort("docID","wordID").coalesce(1)
+    word_save_tmp.cache
     // 生成lightlda-docword文件
     val lightlda_docword = word_save_tmp.map{
       r =>
-        val did = r.getAs[String]("docID")
+        val did = r.getAs[Long]("docID")
         val wid = r.getAs[Long]("wordID")
         val tf = r.getAs[Long]("tf")
         val txt = did + "|" + wid + "|" + tf
         txt.toString
     }
-    lightlda_docword.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/lightlda_docword/all_v2")
+    lightlda_docword.write.mode(SaveMode.Overwrite).text("news_content/lightlda_docword/all_v2")
 
     /*
     //------------------------------------ 5 生成lda-libsvm格式数据 -----------------------------------------
