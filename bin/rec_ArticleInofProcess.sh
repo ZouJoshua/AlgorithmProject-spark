@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 basepath=`readlink -f $0 | xargs dirname | xargs dirname`
-RUNJAR=${basepath}/lib/apus-up-0.2-SNAPSHOT.jar
+RUNJAR=${basepath}/lib/AlgorithmProject-spark-1.0.jar
 
 dt=$1
 if [ x"${dt}" = x ]; then
@@ -47,6 +47,10 @@ done
 --conf spark.driver.maxResultSize=6g \
 --conf spark.rpc.message.maxSize=2040 \
 --conf spark.yarn.executor.memoryOverhead=3g \
---class com.apus.recommend.article.driver.ArticleInfoProcess \
-{RUNJAR} \
--date ${dt} -entity_category_path ${entityCategoryPath} -unclassified_path ${unclassifiedPath} -article_info_hdfspath ${articleInfoHdfsPath} -mark_level ${marklevel}
+--class com.apus.mongodb.ArticleInfoProcess \
+${RUNJAR} \
+-date ${dt} \
+-entity_category_path ${entityCategoryPath} \
+-unclassified_path ${unclassifiedPath} \
+-article_info_hdfspath ${articleInfoHdfsPath} \
+-mark_level ${marklevel}

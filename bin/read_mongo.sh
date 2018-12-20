@@ -15,7 +15,7 @@ fi
 
 outputpath=$3
 if [ x"${outputpath}" = x ]; then
-   outputpath="/user/zoushuai/news_content/read_mongo_test/dt=${dt}"
+   outputpath="/user/zoushuai/news_content/read_mongo_test"
 fi
 
 #依赖包路径
@@ -42,4 +42,6 @@ done
 --conf spark.yarn.executor.memoryOverhead=3g \
 --class com.apus.mongodb.ReadMongodb \
 ${basepath}/lib/AlgorithmProject-spark-1.0.jar \
--date ${dt} -inputUrl ${inputurl} -outpath ${outputpath}
+-date ${dt} \
+-operate_res_url ${inputurl} \
+-operate_res_savepath ${outputpath}

@@ -35,14 +35,17 @@ object ReadMongodb {
 //                  "manual_keywords", "is_right", "one_level", "two_level", "three_level",
 //                  "op_id", "op_name", "op_time", "server_time")
     //test
-    val df_list = List("article_doc_id", "article_id", "choose_keywords",
-                "is_right", "one_level", "two_level", "op_time", "server_time")
-    println(df.show)
-    val originDf = df.select(df_list.map(col): _*)
-    val num = originDf.count()
+//    val df_list = List("article_doc_id", "article_id", "choose_keywords",
+//                "is_right", "one_level", "two_level", "op_time", "server_time")
 
-    originDf.repartition(1).write.mode(SaveMode.Overwrite).parquet(outputPath)
-    println("\nSuccessfully write %1$s data to hdfs".format(num))
+//    val originDf = df.select(df_list.map(col): _*)
+//    val num = originDf.count()
+
+//    originDf.repartition(1).write.mode(SaveMode.Overwrite).parquet(outputPath)
+    println(df.show)
+    val num = df.count()
+    df.repartition(1).write.mode(SaveMode.Overwrite).parquet(outputPath)
+    println("\nSuccessfully write %s data to HDFS: %s".format(num, outputPath))
     spark.stop()
   }
 }

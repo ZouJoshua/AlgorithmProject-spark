@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 basepath=`readlink -f $0 | xargs dirname | xargs dirname`
-RUNJAR=${basepath}/lib/apus-up-0.2-SNAPSHOT.jar
+RUNJAR=${basepath}/lib/AlgorithmProject-spark-1.0.jar
 
 dt=$1
 
@@ -41,6 +41,8 @@ done
 --conf spark.driver.maxResultSize=6g \
 --conf spark.rpc.message.maxSize=2040 \
 --conf spark.yarn.executor.memoryOverhead=3g \
---class com.apus.recommend.article.driver.ReadMongodb \
-{RUNJAR} \
--date ${dt} -operate_res_url ${operateResUrl} -operate_res_savepath ${operateResSavePath}
+--class com.apus.mongodb.ReadMongodb \
+${RUNJAR} \
+-date ${dt} \
+-operate_res_url ${operateResUrl} \
+-operate_res_savepath ${operateResSavePath}

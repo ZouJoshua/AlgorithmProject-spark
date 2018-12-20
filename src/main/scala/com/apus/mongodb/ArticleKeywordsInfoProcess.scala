@@ -68,7 +68,7 @@ object ArticleKeywordsInfoProcess {
                   // 匹配 '>','<'里面的内容，防止将html标签里的内容替换掉
                   val toReplace_ = "<i class=\"apus-entity-words\"> "+w+" </i>"
                   val toReplace = java.util.regex.Matcher.quoteReplacement(toReplace_)
-                  ori_text = ori_text.replaceAll("(?<=[^\\p{L}])("+w_clean+")(?=[^\\p{L}])", toReplace)
+                  ori_text = ori_text.replaceAll("(?<=[^\\p{L}])("+w_clean+")(?=([^\\p{L}]|‘s|`s|'s))", toReplace)
                 //                  ori_text = ori_text.replaceAll("(?<=[^\\p{L}])(?i)("+w_clean+")(?-i)(?=[^\\p{L}])","<i class=\"apus-entity-words\"> "+w+" </i>")
               }
               tn.text(ori_text)
