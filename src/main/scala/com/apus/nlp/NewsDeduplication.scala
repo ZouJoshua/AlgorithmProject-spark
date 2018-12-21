@@ -44,6 +44,8 @@ object NewsDeduplication {
         .withColumn("semantic_keywords",seqUDF(lit("")))
 //        .filter("article_len > 100 or html_len > 100") // 增加过滤文章内容长度小于100字符的
     }
+
+    // 选取article_id,article 进行去重
     val mark_article = {
       mark.join(articledf, Seq("article_id"),"left").map{
         row =>
@@ -59,5 +61,14 @@ object NewsDeduplication {
       }.toDF("article_id", "article")
     }
     mark_article.repartition(1).write.format("json").mode(SaveMode.Overwrite).save("news_content/deduplication/dt=2018-12-20")
+
+    // 去重做完，保存数据
+    val dupdf = spark.read.json("news_content/dropdups/dropdups.all_150_5")  // 去重结果
+    val write_to_mongo = {
+      mark.join(articledf, Seq("article_id"),"left")
+        .join(dupdf,Seq("article_id"),"left").filter("dupmark is null")
+    }
+    write_to_mongo.write.mode(SaveMode.Overwrite).save("news_content/writemongo/tmp/dt=2018-12-21")
+
   }
 }
