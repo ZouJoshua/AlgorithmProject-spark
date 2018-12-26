@@ -1,118 +1,144 @@
 package com.apus.nlp
 
+import edu.arizona.sista.processors.fastnlp.FastNLPProcessor
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.clustering.LDA
-import org.apache.spark.sql.{SaveMode, SparkSession}
-import org.apache.spark.sql.functions._
+import org.apache.spark.mllib.clustering.LDA
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.rdd.RDD
+import org.json4s.jackson.JsonMethods._
+import org.json4s.{DefaultFormats, _}
+import org.apache.log4j.{Logger, Level}
+import scala.collection.mutable
+
 
 /**
-  * Created by Joshua on 2018-11-17
+  * Created by Joshua on 2018-12-26
   */
 
-object NewsLDA {
-
-  def main(args: Array[String]): Unit = {
-
-    val spark = SparkSession.builder()
-      .appName("LDAModel-nlp")
-      .getOrCreate()
-    val sc = new SparkContext()
-    import spark.implicits._
-
-    val ngramsPath = "news_content/lda_libsvm/dt=2018-11-20"
-
-    // Loads data.
-    val dataset = spark.read.option("numFeatures", "15984963").format("libsvm").load(ngramsPath)
-
-    import org.apache.spark.ml.linalg.SparseVector
-    dataset.head.getAs[SparseVector]("features").indices.length
-    dataset.head.getAs[SparseVector]("features").values.length
-    dataset.map{
-      r =>
-        val label = r.getAs[Double]("label")
-        val num1 = r.getAs[SparseVector]("features").indices.length
-        val num2 = r.getAs[SparseVector]("features").values.length
-        val x = if(num1 < 20) 1 else 0
-        (label, x)
-    }.toDF("x1","x2")
 
 
-    //------------------------------------1 模型训练-----------------------------------------
-    /**
-      * k: 主题数，或者聚类中心数
-      * DocConcentration：文章分布的超参数(Dirichlet分布的参数)，必需>1.0，值越大，推断出的分布越平滑
-      * TopicConcentration：主题分布的超参数(Dirichlet分布的参数)，必需>1.0，值越大，推断出的分布越平滑
-      * MaxIterations：迭代次数，需充分迭代，至少20次以上
-      * setSeed：随机种子
-      * CheckpointInterval：迭代计算时检查点的间隔
-      * Optimizer：优化计算方法，目前支持"em", "online" ，em方法更占内存，迭代次数多内存可能不够会抛出stack异常
-      */
-    val lda=new LDA().setK(500).setTopicConcentration(3).setDocConcentration(3).setOptimizer("online").setCheckpointInterval(2).setMaxIter(100)
+object NewsLDA extends App {
+  // <Settings>
+  val inputPath = "/Users/bramleenders/Desktop/output_awesome/"
+  val fileFilter = "HN-stories-2015-January-*"
+  val outputPath = "/Users/bramleenders/Desktop/analysis_output/"
+  // </Settings>
 
-    val model=lda.fit(dataset)
+  implicit val formats = DefaultFormats
 
-    /**生成的model不仅存储了推断的主题，还包括模型的评价方法。*/
-    //---------------------------------2 模型评价-------------------------------------
+  // Brings in default date formats etc.
+  case class WebPage(title: String, metaDescription: String, metaKeywords: String, cleanedText: String, finalUrl: String, topImage: String)
 
-    //模型的评价指标：ogLikelihood，logPerplexity
-    //（1）根据训练集的模型分布计算的log likelihood，越大越好。
-    val ll = model.logLikelihood(dataset)
+  case class HNItem(created_at: java.util.Date, title: String, url: String, author: String, points: Int, story_text: String,
+                    num_comments: Int, created_at_i: Int, objectID: String)
 
-    //（2）Perplexity评估，越小越好
-    val lp = model.logPerplexity(dataset)
+  case class Item(webpage: WebPage, HNItem: HNItem)
 
-    println(s"The lower bound on the log likelihood of the entire corpus: $ll")
-    println(s"The upper bound bound on perplexity: $lp")
+  // Load the stop words
+  // List found on: http://jmlr.org/papers/volume5/lewis04a/a11-smart-stop-list/english.stop
+  val stream = getClass.getResourceAsStream("/english.stop")
+  val stopWords = scala.io.Source.fromInputStream(stream).getLines().toList
 
-    //---------------------------------3 模型及描述------------------------------
-    //模型通过describeTopics、topicsMatrix来描述
+  val sc = new SparkContext("local[8]", "Main")
 
-    //（1）描述各个主题最终的前maxTermsPerTopic个词语（最重要的词向量）及其权重
-    val topics=model.describeTopics(maxTermsPerTopic=10)
-    println("The topics described by their top-weighted terms:")
-    topics.show(false)
-
-
-    /**主题    主题包含最重要的词语序号                     各词语的权重
-        +-----+-------------+------------------------------------------+
-        |topic|termIndices  |termWeights                               |
-        +-----+-------------+------------------------------------------+
-        |0    |[5, 4, 0, 1] |[0.21169509638828377, 0.19142090510443274]|
-        |1    |[5, 6, 1, 2] |[0.12521929515791688, 0.10175547561034966]|
-        |2    |[3, 10, 6, 9]|[0.19885345685860667, 0.18794498802657686]|
-        +-----+-------------+------------------------------------------+
-      */
-
-    //（2） topicsMatrix: 主题-词分布，相当于phi。
-    val topicsMat=model.topicsMatrix
-    model.estimatedDocConcentration
-    model.getTopicConcentration
-    println("topicsMatrix")
-    println(topicsMat.toString())
-    /**topicsMatrix
-        12.992380082908886  0.5654447550856024  16.438154549631257
-        10.552480038361052  0.6367807085306598  19.81281695100224
-        2.204054885551135   0.597153999004713   6.979803589429554
-      *
-      */
-
-    //-----------------------------------4 对语料的主题进行聚类---------------------
-    val topicsProb=model.transform(dataset)
-    topicsProb.select("label", "topicDistribution").show(false)
-
-    /** label是文档序号 文档中各主题的权重
-        +-----+--------------------------------------------------------------+
-        |label|topicDistribution                                             |
-        +-----+--------------------------------------------------------------+
-        |0.0  |[0.523730754859981,0.006564444943344147,0.46970480019667477]  |
-        |1.0  |[0.7825074858166653,0.011001204994496623,0.206491309188838]   |
-        |2.0  |[0.2085069748527087,0.005698459472719417,0.785794565674572]   |
-        ...
-
-      */
-
-    //-----------------------------------5 模型保存与加载--------------------------
-    model.save("")
-    spark.stop()
+  // Load all the files generated by the crawler and split each line (each line contains one article)
+  // Get rid of weird characters and filter all the empty artciles (the ones that the crawler couldn't fetch)
+  val corpus: RDD[Item] = sc.wholeTextFiles(inputPath + fileFilter).flatMap { case (_, file) =>
+    file.split("\n").map(parse(_).extract[Item]).filter(_.webpage.cleanedText != "")
   }
+
+  // Init the NLPProcessor (other options here: CoreNLPProcessor, BioNLPProcessor)
+  val proc = new FastNLPProcessor(withDiscourse = true)
+  val tokenized = corpus.map(_.webpage.cleanedText)
+    .map(_.toLowerCase)
+    .map(_.replaceAll("(?m)[^a-z0-9\\.]+", " "))
+    .mapPartitions(partition => {
+      partition.map { p =>
+        val doc = proc.mkDocument(p)
+        proc.tagPartsOfSpeech(doc)
+        proc.lemmatize(doc)
+        val words = doc.sentences.flatMap(x => x.lemmas.get)
+        //      doc.clear()
+        val size = words.length
+
+        println("Lemmatized " + words.length + " words.")
+
+        words
+      }
+    })
+    .map(
+      _.filter(_.length > 3) // Only words that are longer than 3 characters
+        .filter(!stopWords.contains(_)) // Filter out the stop-words
+    )
+
+  // Choose the vocabulary.
+  //   termCounts: Sorted list of (term, termCount) pairs
+  val termCounts: Array[(String, Long)] =
+  tokenized
+    .flatMap(_.map(_ -> 1L))
+    .reduceByKey(_ + _)
+    .collect()
+    .sortBy(-_._2)
+
+  //   vocabArray: Chosen vocab (removing common terms)
+  val numStopwords = 20
+  val vocabArray: Array[String] =
+    termCounts
+      .takeRight(termCounts.size - numStopwords)
+      .map(_._1)
+
+  //   vocab: Map term -> term index
+  val vocab: Map[String, Int] = vocabArray.zipWithIndex.toMap
+
+  // Convert documents into term count vectors
+  val documents: RDD[(Long, Vector)] =
+    tokenized.zipWithIndex().map { case (tokens, id) =>
+      val counts = new mutable.HashMap[Int, Double]()
+      tokens.foreach { term =>
+        if (vocab.contains(term)) {
+          val idx = vocab(term)
+          counts(idx) = counts.getOrElse(idx, 0.0) + 1.0
+        }
+      }
+      (id, Vectors.sparse(vocab.size, counts.toSeq))
+    }
+
+  // Set LDA parameters
+  val numTopics = 50
+  val lda = new LDA().setK(numTopics).setMaxIterations(50)
+
+  val ldaModel = lda.run(documents)
+  val avgLogLikelihood = ldaModel.logLikelihood / documents.count()
+
+  // Write topics, showing top-weighted 10 terms for each topic.
+  val outTM = new java.io.FileWriter(outputPath + "Topic_Matrix_" + fileFilter + ".txt")
+  var counter = 0
+
+  // Print topics, showing top-weighted 10 terms for each topic.
+  val topicIndices = ldaModel.describeTopics(maxTermsPerTopic = 10)
+  topicIndices.foreach { case (terms, termWeights) =>
+    outTM.write(s"TOPIC $counter:\n")
+    counter = counter + 1
+    terms.zip(termWeights).foreach { case (term, weight) =>
+      outTM.write(s"${vocabArray(term.toInt)}\t$weight\n")
+    }
+    outTM.write("\n")
+  }
+  outTM.close()
+
+  // Write top topics for each document
+  val outTD = new java.io.FileWriter(outputPath + "Topic_Distributions_" + fileFilter + ".txt")
+
+  val topicDist = ldaModel.topicDistributions.collect()
+  corpus.collect().map(_.HNItem.title).zip(topicDist.sortBy(_._1)).foreach { case (docID, (_, topics)) =>
+    outTD.write(docID)
+    topics.toArray.zipWithIndex.sortBy(-_._1).filter(_._1 >= 1.0 / numTopics).foreach { case (_, topicID) =>
+      outTD.write(", " + topicID)
+    }
+    outTD.write("\n")
+  }
+
+  outTD.close()
+
+  sc.stop()
 }

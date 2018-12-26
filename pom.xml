@@ -128,14 +128,17 @@
         </exclusion>
       </exclusions>
     </dependency>
-
-
+    <!-- https://mvnrepository.com/artifact/edu.arizona.sista/processors -->
+    <dependency>
+      <groupId>edu.arizona.sista</groupId>
+      <artifactId>processors_2.11</artifactId>
+      <version>5.5</version>
+    </dependency>
     <dependency>
       <groupId>org.clulab</groupId>
       <artifactId>processors-corenlp_2.11</artifactId>
       <version>6.0.4</version>
     </dependency>
-
     <!-- https://mvnrepository.com/artifact/org.clulab/processors-main -->
     <dependency>
       <groupId>org.clulab</groupId>
