@@ -75,7 +75,7 @@ object ArticleInfoProcess {
     val mark_id = markDF.select(col("news_id").cast(StringType),col("resource_id"))
     val markall = {
       val seqUDF = udf((t: String) => Seq.empty[String])
-      val cleanUDF = udf((level: String) => if(level == null || level.replace(" ","") == null) null else level.trim().toLowerCase)// 增加清洗分类
+      val cleanUDF = udf((level: String) => if(level == null || level.replace(" ","") == "") null else level.trim().toLowerCase)// 增加清洗分类
       markDF.withColumn("article_id", concat_ws("", mark_id.schema.fieldNames.map(col): _*))
         .selectExpr("article_id", "title", "url as article_url", "top_category", "sub_category", "third_category", "length(content) as article_len","length(html) as html_len")
         .withColumn("one_level", cleanUDF(col("top_category")))

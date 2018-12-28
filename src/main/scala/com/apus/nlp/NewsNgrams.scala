@@ -49,8 +49,12 @@ object NewsNgrams {
     import spark.implicits._
     val sc = spark.sparkContext
 
+    val dt = "2018-11-22"
+    val dataPath = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour"
+    val dataDtPath = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=%s".format(dt)
     val stopwordsPath = "/user/zoushuai/news_content/stopwords.txt"
 
+    //------------------------------------1 加载停用词-----------------------------------------
     // Load the stop words
     // List found on: /user/zoushuai/news_content/stopwords.txt
     val stopwords_bd = {
@@ -67,17 +71,25 @@ object NewsNgrams {
       sc.broadcast(stopwords)
     }
 
+    //------------------------------------2 获取ngram核心函数-----------------------------------------
+    /**
+      * spark: SparkSession
+      * dataPath：原始数据路径
+      * savePath：存储路径
+      * stopwords_bd: 停用词broadcast
+      */
     def getNGramDF(spark: SparkSession,
+                   dataPath: String,
                    savePath: String = "NgramsDf",
-                   loadPath: String,
                    stopwords_bd: Broadcast[Map[String,Double]]) = {
       val sc = spark.sparkContext
       import spark.implicits._
-      // load inpDF
+
+      // load dataDF
       val inpDF = {
         val html_udf = udf { (html: String) => Jsoup.parse(html).text() }
-        spark.read.parquet(loadPath).filter("country_lang = 'IN_en'")
-          .selectExpr("resource_id as article_id", "url as article_url", "html", "title")
+        spark.read.parquet(dataDtPath).filter("country_lang = 'IN_en'")
+          .selectExpr("resource_id as article_id", "url as article_url", "html", "title", "tags")
           .withColumn("article", html_udf(col("html")))
           .dropDuplicates("article")
       }
@@ -89,7 +101,13 @@ object NewsNgrams {
     }
 
 
-      // FastNLPProcessor split AND generate N_gram | 词性还原归一,去除停用词,去除数字
+    //------------------------------------3 分词方法（1）-----------------------------------------
+    // FastNLPProcessor split AND generate N_gram | 词性还原归一,去除停用词,去除数字
+    /**
+      * inpDF: SparkSession
+      * stopwords_bd: 停用词broadcast
+      */
+
     def ngramsWithFastNLP(inpDF:DataFrame, stopwords_bd:Broadcast[Map[String,Double]]):DataFrame = {
       inpDF.rdd.mapPartitions{
         rs =>
@@ -112,9 +130,15 @@ object NewsNgrams {
       }.toDF("article_id","article","ngrams").filter("size(ngrams) > 0")
     }
 
-      // Manual split AND generate N_gram | 去除数字,长度为1的字符 |
-      // Ngram后再启用停用词因为类似作品名会有 "pump it up",可以去掉一元词"up"不能去掉三元词;
-      // 去掉了长度不足3或超过40的 n元词
+    //------------------------------------3 分词方法（2）-----------------------------------------
+    // Manual split AND generate N_gram | 去除数字,长度为1的字符 |
+    // Ngram后再启用停用词因为类似作品名会有 "pump it up",可以去掉一元词"up"不能去掉三元词;
+    // 去掉了长度不足3或超过40的 n元词
+    /**
+      * inpDF: SparkSession
+      * stopwords_bd: 停用词broadcast
+      */
+
     def ngramWithManuallySplit(inpDF:DataFrame, stopwords_bd:Broadcast[Map[String,Double]]):DataFrame = {
       val max_str_length = 40 // 四元词加上空格最长认为不超过40, 超长的如the caste/other reservation certificates也不适合做标签用
       val min_word_lenth = 3 // n元词中,一个词最小长度3个字符 (不然会有很多姓名中间的 Le Li Aj这种一元的,当他们组成三元词的时候长度自然就够了
@@ -161,30 +185,36 @@ object NewsNgrams {
               }.map(_.replaceAll("^[^\\p{L}0-9]+|[^\\p{L}0-9]+$"," ").replaceAll("\\s+"," ").trim/*.toLowerCase*/)
                 .filter(!stopwords_bd.value.contains(_))
                 .filter(str => !str.split(" ").forall(x => stopwords_bd.value.contains(x))) // 不能完全由停用词组成
-              (article_id,text,content_ngram,title_ngram,content_ngram++title_ngram)
+              (article_id, text, content_ngram, title_ngram, content_ngram ++ title_ngram)
           }
-      }.toDF("article_id","article","content_ngram","title_ngram","n_gram").filter("size(n_gram) > 0")
+      }.toDF("article_id", "article", "content_ngram", "title_ngram", "n_gram").filter("size(n_gram) > 0")
     }
 
-    // 核心目的就是尽可能多地匹配wiki-base词库
-      // pre:
-      //    按后有分隔符的句号作为split条件,分割句子 | split("\\.(?=\\s)") | 注:有些没有打句号的,比如很短的各个目录和标签,可以通过html标签各自的内容分开获取,但是jsoup在获取<div>中嵌套有<span>时,<span>包裹的会成为数组另一个元素,因为div的ownText不包括span里的,然而实际文章中<span>包裹的其实还是div里内容的一部分,比如说日期
-      // 整体策略:
-      //    a = 直接空格分词做N-gram | 去除首尾空格
-      //    b = 替换特殊符号做N-gram | 去除首尾空格
-      //    result = (a+b.diff(a)).intersect(wikiDict)
-      // 替换规则:
-      //    将 前(或后)是分隔符的[非字母数字] 替换为空格 | "((?<=\\s+)[^\\p{L}\\p{N}]+(?=\\s*)|(?<=\\s*)[^\\p{L}\\p{N}]+(?=\\s+))"
-      // 过滤策略:
-      //    n-gram按空格拆分不能全由停用词组成 | .filter(str => !str.split(" ").forall(x => stopwords_bd.value.contains(x)))
-      //    n-gram一(多)元词,整个词必须有字母 | .filter(str =>  "\\p{L}".r.findAllIn(str).nonEmpty)
-      //    取消此条,因为有 Fast & Furious 这种文章里就用&符号或者数字的,n-gram按空格拆分每一个词都要含有字母 | .filter(str =>  str.split(" ").forall(x => "\\p{L}".r.findAllIn(x).nonEmpty))
-      //    取消此条,考虑 &TV 这种就是字符加上字母的一元词, n-gram一元词不能是直接字符结尾 |
-      //    n-gram词的字符长度限制在 3 ~ 40
-      // 特殊匹配:
-      //    匹配全大写且前后有分隔符的,作为缩写词,如 S.H.I.E.L.D X-23 MD&M | "(?<=\\s+)\\p{Lu}[^\\sa-z]+" | 注:这里[^\\sa-z]已经确定大写字母后面不能跟空格了,所以没必要写(?=\\s)
-      //    匹配单(双)引号内的内容 | "(\"[^\"]+\"|\'[^\']+\')" | 注:和括号匹配不同,这里不能用预匹配,因为正反引号是相同的,如果预匹配不把引号用掉的话,会被下一个字符匹配上比如,abc"def"ghjkl"mn",应该是"def" "mn",但是采用预匹配得到"def" "ghjkl" "mn"
-      //    匹配括号内的内容 |  "(?<=\\()[^)]+(?=\\))"
+
+    //------------------------------------3 分词方法（3）-----------------------------------------
+    // pre:
+    //    按后有分隔符的句号作为split条件,分割句子 | split("\\.(?=\\s)") | 注:有些没有打句号的,比如很短的各个目录和标签,可以通过html标签各自的内容分开获取,但是jsoup在获取<div>中嵌套有<span>时,<span>包裹的会成为数组另一个元素,因为div的ownText不包括span里的,然而实际文章中<span>包裹的其实还是div里内容的一部分,比如说日期
+    // 整体策略:
+    //    a = 直接空格分词做N-gram | 去除首尾空格
+    //    b = 替换特殊符号做N-gram | 去除首尾空格
+    //    result = (a+b.diff(a)).intersect(wikiDict)
+    // 替换规则:
+    //    将 前(或后)是分隔符的[非字母数字] 替换为空格 | "((?<=\\s+)[^\\p{L}\\p{N}]+(?=\\s*)|(?<=\\s*)[^\\p{L}\\p{N}]+(?=\\s+))"
+    // 过滤策略:
+    //    n-gram按空格拆分不能全由停用词组成 | .filter(str => !str.split(" ").forall(x => stopwords_bd.value.contains(x)))
+    //    n-gram一(多)元词,整个词必须有字母 | .filter(str =>  "\\p{L}".r.findAllIn(str).nonEmpty)
+    //    取消此条,因为有 Fast & Furious 这种文章里就用&符号或者数字的,n-gram按空格拆分每一个词都要含有字母 | .filter(str =>  str.split(" ").forall(x => "\\p{L}".r.findAllIn(x).nonEmpty))
+    //    取消此条,考虑 &TV 这种就是字符加上字母的一元词, n-gram一元词不能是直接字符结尾 |
+    //    n-gram词的字符长度限制在 3 ~ 40
+    // 特殊匹配:
+    //    匹配全大写且前后有分隔符的,作为缩写词,如 S.H.I.E.L.D X-23 MD&M | "(?<=\\s+)\\p{Lu}[^\\sa-z]+" | 注:这里[^\\sa-z]已经确定大写字母后面不能跟空格了,所以没必要写(?=\\s)
+    //    匹配单(双)引号内的内容 | "(\"[^\"]+\"|\'[^\']+\')" | 注:和括号匹配不同,这里不能用预匹配,因为正反引号是相同的,如果预匹配不把引号用掉的话,会被下一个字符匹配上比如,abc"def"ghjkl"mn",应该是"def" "mn",但是采用预匹配得到"def" "ghjkl" "mn"
+    //    匹配括号内的内容 |  "(?<=\\()[^)]+(?=\\))"
+
+    /**
+      * inpDF: 原始数据
+      * stopwords_bd: 停用词broadcast
+      */
     def ngramWithManuallySplit_v2(inpDF:DataFrame, stopwords_bd:Broadcast[Map[String,Double]]):DataFrame = {
       val max_str_length = 90 // 四元词加上空格最长认为不超过90, 最长的单词是肺尘病长度为45
       val min_word_lenth = 3 // n元词中,一个词最小长度3个字符 (不然会有很多姓名中间的 Le Li Aj这种一元的,当他们组成三元词的时候长度自然就够了
