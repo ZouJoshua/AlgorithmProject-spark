@@ -1,7 +1,7 @@
 package com.apus.nlp
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions.{col, lit, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{LongType, StringType, StructField}
 import org.jsoup.Jsoup
 import org.jsoup.nodes.{Element, TextNode}
@@ -15,12 +15,12 @@ object NewsTags {
     val spark = SparkSession.builder()
       .appName("ArticleInfoProcess-mongodb")
       .getOrCreate()
+    val sc = spark.sparkContext
     import spark.implicits._
 
     val newsPath = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour"
 
-    //------------------------------------1 新闻tags、超链、url提取tags-----------------------------------------
-
+    //------------------------------------1 读取数据-----------------------------------------
     // 解析所有文章内容
     val getcontentUDF = udf{(html:String) => Jsoup.parse(html).text()}
     val articleDF = {
@@ -31,7 +31,9 @@ object NewsTags {
         .dropDuplicates("html","article")
         .filter("country_lang = 'IN_en'")
     }
-    // 处理tags
+
+    //------------------------------------2 处理抓取的tags-----------------------------------------
+
     val tagDF = {
         articleDF.map{
           r =>
@@ -42,7 +44,8 @@ object NewsTags {
             (id, tags_array, tags_array_lower, tg_count)
         }
     }.toDF("article_id", "tags_array", "tags_array_lower", "tg_count")
-    // 处理超链接
+
+    //------------------------------------3 处理超链接的tags-----------------------------------------
     // 正则提取超链接 存在a标签嵌套问题，用jsoup解析提取
     val hrefDF = {
       articleDF.map{
@@ -61,26 +64,43 @@ object NewsTags {
     }
 
     // 提取超链接tags到集合
-    val href_tags_all = hrefDF.filter("hr_count > 0").rdd.flatMap(r => r.getAs[Seq[String]]("tags_array")).collect.toSet
-//    sc.parallelize(tags_all.toList).saveAsTextFile("news_content/out.txt")
-    val href_tags_file = {
-      hrefDF.filter("hr_count > 0").map{
-        row =>
-          val id = row.getAs[String]("article_id")
-          val url = row.getAs[String]("article_url")
-          val href_array = row.getAs[Seq[String]]("href_array").toString
-          val tags_array = row.getAs[Seq[String]]("tags_array").toString
-          val text = id + "|" + url + "|" + href_array + "|" + tags_array
-          text
-      }.toDF("tags")
+    val href_tags_all = hrefDF.filter("hr_count > 0").rdd.flatMap(r => r.getAs[Seq[String]]("tags_array")).collect //.toSet
+    //    sc.parallelize(href_tags_all.toList).saveAsTextFile("news_content/out.txt")
+    val tags_count = sc.parallelize(href_tags_all.toList).map((_, 1)).reduceByKey(_ + _).toDF("tags","count")
+
+    val tags_filter_count = {
+      tags_count.map {
+        r =>
+          val tags = r.getAs[String]("tags")
+          val count = r.getAs[Int]("count")
+          val tags_len = tags.split(" ").length
+          (tags, count, tags_len)
+      }.toDF("tags", "count", "tags_len")
     }
-//    href_tags_file.coalesce(1).write.mode("overwrite").text("news_content/tmp/out")
+    //    tags_filter_count.filter("tags_len < 5").sort(desc("count")).show(30, false)
+    //    tags_filter_count.filter("tags_len < 5").sort("count").show(30, false)
+    val tags_out = tags_filter_count.filter("tags not like '%http%'").filter("tags not like '%@%'").filter("tags_len < 5").sort(desc("count")) //.show(30, false)
+    tags_out.select("tags").coalesce(1).write.mode("overwrite").text("news_content/tmp/out")
 
+      val href_tags_file = {
+        hrefDF.filter("hr_count > 0").map{
+          row =>
+            val id = row.getAs[String]("article_id")
+            val url = row.getAs[String]("article_url")
+            val href_array = row.getAs[Seq[String]]("href_array").toString
+            val tags_array = row.getAs[Seq[String]]("tags_array").toString
+            val text = id + "\t" + url + "\t" + href_array + "\t" + tags_array
+            text
+        }.toDF("tags")
+      }
+        //    href_tags_file.coalesce(1).write.mode("overwrite").text("news_content/tmp/out")
 
-
+    //------------------------------------4 处理url提取tags-----------------------------------------
     // 处理url特征
 
+    //------------------------------------5 合并数据-----------------------------------------
+
     val article = articleDF.join(tagDF,Seq("article_id")).drop("tags")
-    article.cache
-  }
+        article.cache
+    }
 }
