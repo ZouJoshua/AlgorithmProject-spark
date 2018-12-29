@@ -2,7 +2,7 @@ package com.apus.nlp
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
 import org.clulab.processors.Document
 import org.clulab.processors.fastnlp.FastNLPProcessor
@@ -100,9 +100,8 @@ object NewsNgrams {
       N_gramDF_.write.mode("overwrite").parquet(savePath)
     }
 
-
     //------------------------------------3 分词方法（1）-----------------------------------------
-    // FastNLPProcessor split AND generate N_gram | 词性还原归一,去除停用词,去除数字
+    // FastNLPProcessor split AND generate N_gram | 词形还原归一,去除停用词,去除数字
     /**
       * inpDF: SparkSession
       * stopwords_bd: 停用词broadcast
@@ -129,6 +128,9 @@ object NewsNgrams {
           }
       }.toDF("article_id","article","ngrams").filter("size(ngrams) > 0")
     }
+
+
+
 
     //------------------------------------3 分词方法（2）-----------------------------------------
     // Manual split AND generate N_gram | 去除数字,长度为1的字符 |
