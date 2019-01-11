@@ -36,18 +36,18 @@ object NewsMarkProcess {
     val mark_id = markDF.select(col("news_id").cast(StringType),col("resource_id"))
     val markall = {
       val seqUDF = udf((t: String) => Seq.empty[String])
-      val cleanUDF = udf((level: String) => if(level == null || level.replace(" ","") == "") "others" else level.trim().toLowerCase)// 增加清洗分类
+      val cleanUDF = udf((level: String) => if (level == null || level.replace(" ", "") == "") "others" else level.trim().toLowerCase) // 增加清洗分类
       markDF.withColumn("article_id", concat_ws("", mark_id.schema.fieldNames.map(col): _*))
-        .selectExpr("article_id", "title", "url as article_url", "top_category", "sub_category", "third_category", "length(content) as article_len","length(html) as html_len")
+        .selectExpr("article_id", "title", "url as article_url", "top_category", "sub_category", "third_category", "length(content) as article_len", "length(html) as html_len")
         .withColumn("one_level", cleanUDF(col("top_category")))
         .withColumn("two_level", cleanUDF(col("sub_category")))
         .withColumn("three_level", lit("others"))
         //        .withColumn("three_level", cleanUDF(col("third_category")))
-        .withColumn("need_double_check",lit(0))
-        .withColumn("semantic_keywords",seqUDF(lit("")))
+        .withColumn("need_double_check", lit(0))
+        .withColumn("semantic_keywords", seqUDF(lit("")))
         .drop("top_category", "sub_category", "third_category")
         .filter("article_len > 100 or html_len > 100") // 增加过滤文章内容长度小于100字符的
-    }
+    }.dropDuplicates("article_id")
     markall
   }
 
@@ -109,7 +109,7 @@ object NewsMarkProcess {
         .withColumn("semantic_keywords",seqUDF(lit("")))
         .drop("top_category", "sub_category", "third_category")
         .filter("article_len > 100 or html_len > 100") // 增加过滤文章内容长度小于100字符的
-    }
+    }.dropDuplicates("article_id")
 
     // 清洗不必要的分类名
     val replacedf = markall.map{
@@ -118,7 +118,8 @@ object NewsMarkProcess {
         val rep_tmp = row.getAs[String]("one_level")
           .replace("sports", "sport").replace("sport", "sports") // 体育类修改分类
           .replace("technology", "tech")  // 科技类修改分类名
-        (id,rep_tmp)
+          .replace("international", "world")  // 国际类修改分类名
+        (id, rep_tmp)
     }.toDF("article_id", "one_level")
 
     val mark = markall.drop("one_level").join(replacedf, Seq("article_id"))
@@ -205,7 +206,7 @@ object NewsMarkProcess {
 
     val dt = "2019-01-08"
     //("national","entertainment","sports", "business","international","lifestyle","technology","auto","science")
-    val category = "sports"
+    val category = "international"
     val newsPath = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour"
     val entitywordsPath = "/user/zhoutong/tmp/NGramDF_articleID_and_keywords%s".format("/dt=2018-11-2[2-6]")
     val markPath = if(category == "science") "/user/caifuli/news/all_data/%s".format(category) else "/user/caifuli/news/all_data/%s_classified".format(category)
@@ -219,7 +220,7 @@ object NewsMarkProcess {
     //------------------------------------2 处理标注文章-----------------------------------------
     //
     val markDF = {
-      if(Seq("sports","technology").contains(category)){
+      if(Seq("sports","technology", "international").contains(category)){
         read_mark_article_replace_onelevel(spark, markPath)}
       else if(category == "national"){
         read_national_mark_article(spark, markPath)}
@@ -230,7 +231,7 @@ object NewsMarkProcess {
 
     //------------------------------------3 标注关键词并-----------------------------------------
     //
-    val entitywordsDF = spark.read.option("basePath", entitywordsPath).parquet(entitywordsPath).select("article_id", "entity_keywords")
+    val entitywordsDF = spark.read.parquet(entitywordsPath).select("article_id", "entity_keywords")
     val result = mark_html_with_entitykeywords(articleDF, markDF, entitywordsDF)
     // 过滤部分不符合条件的数据
     val result_filter_kw = result.filter(size($"entity_keywords") > 0 && length($"article") > 100)
