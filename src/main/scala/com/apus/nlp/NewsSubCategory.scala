@@ -183,5 +183,44 @@ object NewsSubCategory {
       all.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/entertainment/entertainment_all")
       println(">>>>>>>>>>写入数据完成")
     }
+
+    //------------------------------------5 处理财经分类标注数据（） -----------------------------------------
+    //
+
+    def business_data_processer(spark: SparkSession,
+                                        newsPath: String,
+                                        dt: String = "2019-01-13") = {
+
+      val business_check_path1 = "news_content/sub_classification/business/business_check1"
+      val business_check_path2 = "news_content/sub_classification/business/business_check2"
+
+      val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
+      val ori_df = {
+        spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
+          .selectExpr("resource_id as article_id", "html", "title")
+          .withColumn("content", getcontentUDF(col("html")))
+          .drop("html")
+      }
+      val df1 = {
+        spark.read.json(business_check_path1)
+          .withColumnRenamed("news_id", "article_id")
+          .withColumnRenamed("top_category","one_level")
+          .withColumnRenamed("sub_category","two_level")
+          .drop("third_category")
+          .withColumn("three_level", lit("others"))
+          .filter("one_level = 'business'")
+          .select("article_id","one_level", "two_level", "three_level")
+      }
+      val df2 = {
+        spark.read.json(business_check_path2)
+          .withColumnRenamed("news_id", "article_id")
+          .withColumn("three_level", lit("others"))
+          .withColumnRenamed("top_category","one_level")
+          .withColumnRenamed("sub_category","two_level")
+          .filter("one_level = 'business'")
+          .select("article_id","one_level","two_level", "three_level")
+      }
+
+    }
   }
 }
