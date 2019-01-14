@@ -108,7 +108,7 @@ object NewsLDA extends App {
   val lda = new LDA().setK(numTopics).setMaxIterations(50)
 
   val ldaModel = lda.run(documents)
-  val avgLogLikelihood = ldaModel.logLikelihood / documents.count()
+//  val avgLogLikelihood = ldaModel.logLikelihood / documents.count()
 
   // Write topics, showing top-weighted 10 terms for each topic.
   val outTM = new java.io.FileWriter(outputPath + "Topic_Matrix_" + fileFilter + ".txt")
@@ -129,14 +129,14 @@ object NewsLDA extends App {
   // Write top topics for each document
   val outTD = new java.io.FileWriter(outputPath + "Topic_Distributions_" + fileFilter + ".txt")
 
-  val topicDist = ldaModel.topicDistributions.collect()
-  corpus.collect().map(_.HNItem.title).zip(topicDist.sortBy(_._1)).foreach { case (docID, (_, topics)) =>
-    outTD.write(docID)
-    topics.toArray.zipWithIndex.sortBy(-_._1).filter(_._1 >= 1.0 / numTopics).foreach { case (_, topicID) =>
-      outTD.write(", " + topicID)
-    }
-    outTD.write("\n")
-  }
+//  val topicDist = ldaModel.topicDistributions.collect()
+//  corpus.collect().map(_.HNItem.title).zip(topicDist.sortBy(_._1)).foreach { case (docID, (_, topics)) =>
+//    outTD.write(docID)
+//    topics.toArray.zipWithIndex.sortBy(-_._1).filter(_._1 >= 1.0 / numTopics).foreach { case (_, topicID) =>
+//      outTD.write(", " + topicID)
+//    }
+//    outTD.write("\n")
+//  }
 
   outTD.close()
 

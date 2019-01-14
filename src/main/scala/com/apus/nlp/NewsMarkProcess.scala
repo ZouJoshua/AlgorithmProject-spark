@@ -54,6 +54,7 @@ object NewsMarkProcess {
   def read_national_mark_article(spark:SparkSession,
                                   markPath:String):DataFrame = {
     // 读取需人工标注数据
+    import spark.implicits._
     val markDF = spark.read.json(markPath)
 
     val mark_id = markDF.select(col("news_id").cast(StringType),col("resource_id"))
@@ -93,6 +94,7 @@ object NewsMarkProcess {
   def read_mark_article_replace_onelevel(spark:SparkSession,
                                markPath: String):DataFrame = {
     // 读取需人工标注数据
+    import spark.implicits._
     val markDF = spark.read.json(markPath)
 
     val mark_id = markDF.select(col("news_id").cast(StringType),col("resource_id"))
