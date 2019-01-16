@@ -2,6 +2,7 @@ package com.apus.nlp
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.StringType
 import org.jsoup.Jsoup
 import org.jsoup.nodes.{Element, TextNode}
 
@@ -362,7 +363,7 @@ object NewsSubCategory {
       val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
       val ori_df = {
         spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
-          .selectExpr("resource_id as article_id", "html", "title")
+          .selectExpr("resource_id as article_id", "html", "title", "url")
           .withColumn("content", getcontentUDF(col("html")))
           .drop("html")
       }
@@ -421,6 +422,50 @@ object NewsSubCategory {
       }
       println(">>>>>>>>>>正在写入数据")
       sports_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/sports/sports_all")
+      println(">>>>>>>>>>写入数据完成")
+    }
+
+    //------------------------------------8 汽车分类标注数据（） -----------------------------------------
+    //
+    def auto_data_processer(spark: SparkSession,
+                              newsPath: String,
+                              dt: String = "2019-01-15") = {
+      import spark.implicits._
+
+      val auto_path = "/user/caifuli/news/all_data/auto_classified"
+      val auto_ori = spark.read.json(auto_path)
+
+      val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
+      val ori_df = {
+        spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
+          .selectExpr("resource_id as article_id", "html", "title", "url")
+          .withColumn("content", getcontentUDF(col("html")))
+          .drop("html")
+      }
+
+      val auto_process_df = {
+        val mark_id = auto_ori.select(col("news_id").cast(StringType),col("resource_id"))
+        val cleanUDF = udf{(word: String) => word.toLowerCase().replace(" ","").replace("aoto","auto")}
+        auto_ori.withColumn("article_id", concat_ws("", mark_id.schema.fieldNames.map(col): _*))
+          .withColumn("one_level", cleanUDF(col("top_category")))
+          .withColumn("two_level", cleanUDF(col("sub_category")))
+          .withColumnRenamed("third_category", "three_level")
+          .select("article_id","one_level", "two_level", "three_level")
+      }
+
+      val auto = {
+        val two_wheels = Seq("motor","cycling","bike")
+        val replaceUDF = udf((word:String) => if(two_wheels.contains(word)) "others" else word)
+        auto_process_df.join(ori_df, Seq("article_id"))
+          .filter("two_level in ('car','motor','cycling','bike')")
+          .withColumn("two_level_new", replaceUDF(col("two_level")))
+          .drop("two_level")
+          .withColumnRenamed("two_level_new", "two_level")
+      }
+      println(">>>>>>>>>>正在写入数据")
+      auto.write.mode("overwrite").save("news_content/sub_classification/tmp/auto_all")
+      val redf = spark.read.parquet("news_content/sub_classification/tmp/auto_all")
+      redf.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/auto/auto_all")
       println(">>>>>>>>>>写入数据完成")
     }
   }
