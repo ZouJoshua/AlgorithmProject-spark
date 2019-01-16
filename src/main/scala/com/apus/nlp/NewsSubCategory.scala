@@ -351,6 +351,100 @@ object NewsSubCategory {
       println(">>>>>>>>>>写入数据完成")
     }
 
+    //------------------------------------5 处理财经分类标注数据（版本3） -----------------------------------------
+    // finance: money\banking\oil-price\gold
+    // investment: invest\personal-finance\real-estate\carrer\property
+    // market: commodities\market\stock\trading
+    // industry economic: company\people\industry
+
+    def business_data_processer_v2(spark: SparkSession,
+                                   newsPath: String,
+                                   dt: String = "2019-01-16") = {
+      import spark.implicits._
+      val business_check_path1 = "news_content/sub_classification/business/business_check1"
+      val business_check_path2 = "news_content/sub_classification/business/business_check2"
+
+      val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
+      val ori_df = {
+        spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
+          .selectExpr("resource_id as article_id", "html", "title", "url")
+          .withColumn("content", getcontentUDF(col("html")))
+          .drop("html")
+      }
+      val cleanUDF = udf{(word: String) =>
+        word.toLowerCase()
+          .replace("personal finance", "personal-finance")
+          .replace("real estate","real-estate").replace("real-eatate", "real-estate")
+          .replace("stocks","stock").replace("banking","bank").replace("bank","banking")
+          .replace("markets", "market").replace("starups", "startups")
+          .replace("oil price","oil-price")
+          .replace(" ","")
+          .replace("investment","invest")
+          .replace("commodity", "commodities")
+          .replace("carrer", "career")
+      }
+      val df1 = {
+        spark.read.json(business_check_path1)
+          .filter("top_category = 'business'")
+          .withColumnRenamed("news_id", "article_id")
+          .withColumnRenamed("top_category","one_level")
+          .withColumn("two_level",cleanUDF(col("sub_category")))
+          .withColumn("three_level", lit("others"))
+          .filter("one_level = 'business'")
+          .select("article_id","one_level", "two_level", "three_level")
+      }
+      val df2 = {
+        spark.read.json(business_check_path2)
+          .withColumnRenamed("news_id", "article_id")
+          .withColumn("three_level", lit("others"))
+          .withColumnRenamed("top_category","one_level")
+          .withColumn("two_level",cleanUDF(col("sub_category")))
+          .filter("one_level = 'business'")
+          .select("article_id","one_level","two_level", "three_level")
+      }
+
+      val df = {
+        df1.union(df2).distinct()
+          .dropDuplicates("article_id").filter("two_level != ''")
+          .map{row =>
+            val id = row.getAs[Int]("article_id").toString
+            val one = row.getAs[String]("one_level")
+            val two = row.getAs[String]("two_level")
+            val three = row.getAs[String]("three_level")
+            (id,one,two,three)
+          }.toDF("article_id","one_level","two_level","three_level")
+      }
+
+      val result = {
+        val finance = Seq("finance", "money", "banking", "oil-price", "gold")
+        val investment = Seq("invest", "personal-finance", "real-estate", "career","property")
+        val market = Seq("commodities", "market", "stock", "trading")
+        val industry_economic = Seq("people", "industry")
+        val replaceUDF = udf{
+          (word:String) =>
+            if(finance.contains(word)) "finance"
+            else if(investment.contains(word)) "investment"
+            else if(market.contains(word)) "market"
+            else if(industry_economic.contains(word)) "industry economic"
+            else "others"
+        }
+        val all = df.join(ori_df,Seq("article_id"))
+        val company = all.filter("two_level = 'company'").limit(12000).select("article_id","url","title","content","one_level","two_level","three_level")
+
+        val others = all.filter("two_level in ('industry', 'stock', 'market', 'money', 'banking', 'invest', 'personal-finance', 'commodities', 'career', 'tax', 'oil-price', 'real-estate', 'trading', 'gold', 'people', 'law', 'crime', 'property', 'insurance', 'index', 'startups', 'bond', 'e-commerce')")
+          .withColumn("two_level_new", replaceUDF(col("two_level")))
+          .drop("two_level")
+          .withColumnRenamed("two_level_new", "two_level")
+            .select("article_id","url","title","content","one_level","two_level","three_level")
+        company.union(others)
+      }
+      println(">>>>>>>>>>正在写入数据")
+      result.write.mode("overwrite").save("news_content/sub_classification/tmp/business_all")
+      val redf = spark.read.parquet("news_content/sub_classification/tmp/business_all")
+      redf.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/business/business_all")
+      println(">>>>>>>>>>写入数据完成")
+    }
+
 
     //------------------------------------6 处理科技分类标注数据（） -----------------------------------------
     //
