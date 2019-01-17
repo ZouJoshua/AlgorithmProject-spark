@@ -51,6 +51,30 @@ object NewsMarkProcess {
     markall
   }
 
+  def read_lifestyle_mark_article(spark:SparkSession,
+                                  markPath:String):DataFrame = {
+    // 读取需人工标注数据
+    import spark.implicits._
+    val markDF = spark.read.json(markPath)
+
+    val mark_id = markDF.select(col("news_id").cast(StringType),col("resource_id"))
+    val markall = {
+      val seqUDF = udf((t: String) => Seq.empty[String])
+      val cleanUDF = udf((level: String) => if(level == null || level.replace(" ","") == "") "others" else level.trim().toLowerCase.replace(" ",""))// 增加清洗分类
+      markDF.withColumn("article_id", concat_ws("", mark_id.schema.fieldNames.map(col): _*))
+        .selectExpr("article_id", "title", "url as article_url", "top_category", "sub_category", "third_category", "length(content) as article_len","length(html) as html_len")
+        .withColumn("one_level", cleanUDF(col("top_category")))
+        .withColumn("two_level", cleanUDF(col("sub_category")))
+        .withColumn("three_level", lit("others"))
+        //        .withColumn("three_level", cleanUDF(col("third_category")))
+        .withColumn("need_double_check",lit(0))
+        .withColumn("semantic_keywords",seqUDF(lit("")))
+        .drop("top_category", "sub_category", "third_category")
+        .filter("article_len > 100 or html_len > 100") // 增加过滤文章内容长度小于100字符的
+    }.dropDuplicates("article_id")
+    markall
+  }
+
   def read_national_mark_article(spark:SparkSession,
                                   markPath:String):DataFrame = {
     // 读取需人工标注数据
@@ -226,6 +250,9 @@ object NewsMarkProcess {
         read_mark_article_replace_onelevel(spark, markPath)}
       else if(category == "national"){
         read_national_mark_article(spark, markPath)}
+      else if(category == "lifestyle"){
+        read_lifestyle_mark_article(spark, markPath)
+      }
       else{
         read_mark_article(spark, markPath)
       }

@@ -19,41 +19,42 @@ object NewsSubCategoryCheck {
           .selectExpr("resource_id as article_id", "url")
       }
 
-      val train = spark.read.json("news_content/subcategory_check/business_test")
-      val train_df = train.join(ori_df, Seq("article_id"))
+      val train = spark.read.json("news_content/subcategory_check/business_v1_train")
+//      val train_df = train.join(ori_df, Seq("article_id"))
+      val train_df = spark.read.json("news_content/subcategory_check/business_v1_train")
       val out1 = {
         train_df.filter("two_level != predict_two_level")
-          .filter("two_level = 'market' and predict_two_level = 'finance'").limit(5)
+          .filter("two_level = 'market' and predict_two_level = 'industry economic'").limit(5)
           .select("article_id", "url", "title", "content", "two_level", "predict_two_level", "predict_two_level_proba")
       }
       val out2 = {
         train_df.filter("two_level != predict_two_level")
-          .filter("two_level = 'investment' and predict_two_level = 'finance'").limit(5)
+          .filter("two_level = 'investment' and predict_two_level = 'industry economic'").limit(5)
           .select("article_id", "url", "title", "content", "two_level", "predict_two_level", "predict_two_level_proba")
       }
       val out3 = {
         train_df.filter("two_level != predict_two_level")
-          .filter("two_level = 'industry economic' and predict_two_level = 'finance'").limit(5)
+          .filter("two_level = 'company' and predict_two_level = 'industry economic'").limit(5)
           .select("article_id", "url", "title", "content", "two_level", "predict_two_level", "predict_two_level_proba")
       }
       val out4 = {
         train_df.filter("two_level != predict_two_level")
-          .filter("two_level = 'industry economic' and predict_two_level = 'investment'").limit(5)
+          .filter("two_level = 'others' and predict_two_level = 'industry economic'").limit(5)
           .select("article_id", "url", "title", "content", "two_level", "predict_two_level", "predict_two_level_proba")
       }
       val out5 = {
         train_df.filter("two_level != predict_two_level")
-          .filter("two_level = 'market' and predict_two_level = 'investment'").limit(5)
+          .filter("two_level = 'others' and predict_two_level = 'investment'").limit(5)
           .select("article_id", "url", "title", "content", "two_level", "predict_two_level", "predict_two_level_proba")
       }
       val out6 = {
         train_df.filter("two_level != predict_two_level")
-          .filter("two_level = 'others' and predict_two_level = 'investment'").limit(5)
+          .filter("two_level = 'industry economic' and predict_two_level = 'company'").limit(5)
           .select("article_id", "url", "title", "content", "two_level", "predict_two_level", "predict_two_level_proba")
       }
       val out7 = {
         train_df.filter("two_level != predict_two_level")
-          .filter("two_level = 'industry economic' and predict_two_level = ' others'").limit(10)
+          .filter("two_level = 'industry economic' and predict_two_level = 'company'").limit(5)
           .select("article_id", "url", "title", "content", "two_level", "predict_two_level", "predict_two_level_proba")
       }
       val out8 = {
