@@ -1,6 +1,8 @@
 package com.apus.nlp
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions.{col, concat_ws, udf}
+import org.apache.spark.sql.types.StringType
 
 /**
   * Created by Joshua on 2019-01-16
@@ -20,7 +22,7 @@ object NewsSubCategoryCheck {
       }
 
       val train = spark.read.json("news_content/subcategory_check/business_v1_train")
-//      val train_df = train.join(ori_df, Seq("article_id"))
+      //      val train_df = train.join(ori_df, Seq("article_id"))
       val train_df = spark.read.json("news_content/subcategory_check/business_v1_train")
       val out1 = {
         train_df.filter("two_level != predict_two_level")
@@ -67,5 +69,30 @@ object NewsSubCategoryCheck {
 
     }
 
+
+    //------------------------------------2 世界数据查看国家 -----------------------------------------
+    //
+    // US,China,Pakistan,Korea,North,India,Russia,UK,Syria,Iran,Saudi,Israel,UN
+
+    def world_check_country(spark: SparkSession) = {
+      val path = "/user/caifuli/news/all_data/international_classified"
+
+      val markDF = spark.read.json(path)
+
+      val mark_id = markDF.select(col("news_id").cast(StringType), col("resource_id"))
+      val markall = {
+        val seqUDF = udf((t: String) => Seq.empty[String])
+        val cleanUDF = udf((level: String) => if (level == null || level.replace(" ", "") == "") "others" else level.trim().toLowerCase) // 增加清洗分类
+        markDF.withColumn("article_id", concat_ws("", mark_id.schema.fieldNames.map(col): _*))
+          .selectExpr("article_id", "title", "url as article_url", "top_category", "sub_category", "third_category", "length(content) as article_len", "length(html) as html_len")
+      }.dropDuplicates("article_id", "title")
+      val title_df = {
+        markall.rdd.flatMap {
+          row =>
+            val title = row.getAs[String]("title").split(" ")
+            title
+        }.map(word => (word, 1)).filter(_._1.length > 1).filter(_._1.slice(0, 1).map(_.toByte).toList(0) <= 90).reduceByKey(_ + _).sortBy(_._2, ascending = false)
+      }
+      title_df.coalesce(1).saveAsTextFile("news_content/tmp/country_count")
+    }
   }
-}

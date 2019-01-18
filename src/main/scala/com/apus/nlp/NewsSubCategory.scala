@@ -84,11 +84,11 @@ object NewsSubCategory {
       println(">>>>>>>>>>写入数据完成")
     }
 
-    //------------------------------------3 处理国内二级分类标注数据（6个分类） -----------------------------------------
-    //  1.去除three_level 为null
+    //------------------------------------3 处理国内二级分类标注数据（5个分类） -----------------------------------------
+    //  1.去除three_level 为null(三级为null表示文章有问题，比如不完整等)
     //  2.抽取three_level 和two_level 为crime、law
     //  3.抽取two_level 为politics、education
-    //  4.其他放为others(two_level: environment\medical\military\traffic\
+    //  4.其他放为others(two_level: environment\medical\military\traffic\national economy
     //        three_level: accidents\public benefit\events\others)
     def national_data_processer_v3(spark: SparkSession,
                                    newsPath: String,
@@ -96,46 +96,51 @@ object NewsSubCategory {
       val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
       val df = spark.read.parquet(path)
       val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
-      val ori_df = spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]").selectExpr("resource_id as article_id", "html", "title").withColumn("content", getcontentUDF(col("html"))).drop("html").dropDuplicates("article_id")
-      val nonull_df = df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time").filter("one_level = 'national'").filter("three_level is not null").dropDuplicates("article_id")
+      val ori_df = {
+        spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
+          .selectExpr("resource_id as article_id", "html", "title", "url")
+          .withColumn("content", getcontentUDF(col("html")))
+          .drop("html").dropDuplicates("article_id")
+      }
+      val nonull_df = df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time").filter("one_level = 'national'").filter("two_level is not null and three_level is not null").dropDuplicates("article_id")
       val class_df = nonull_df.join(ori_df, Seq("article_id"))
       val crime_df = {
-        class_df.filter("two_level = 'crime' or three_level = 'crime'")
+        class_df.filter("two_level = 'society' and three_level = 'crime'")
           .drop("two_level")
           .withColumn("two_level", lit("crime"))
-          .select("article_id", "title", "content", "one_level", "two_level", "three_level")
+          .select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
       }
       val law_df = {
-        class_df.filter("two_level = 'law' or three_level = 'law'")
+        class_df.filter("two_level = 'society' and three_level = 'law'")
           .drop("two_level")
           .withColumn("two_level", lit("law"))
-          .select("article_id", "title", "content", "one_level", "two_level", "three_level")
+          .select("article_id",  "url", "title", "content", "one_level", "two_level", "three_level")
       }
       val politics_df = {
         class_df.filter("two_level = 'politics'")
-          .select("article_id", "title", "content", "one_level", "two_level", "three_level")
+          .select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
       }
       val education_df = {
         class_df.filter("two_level = 'education'")
-          .select("article_id", "title", "content", "one_level", "two_level", "three_level")
+          .select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
       }
       val others_df1 = {
         val nameUDF = udf((t: String) => if (t != null) t else "others")
-        class_df.filter("two_level = 'society' and three_level in ('others','accidents','public benefit','events','food security')")
+        class_df.filter("two_level = 'society' and three_level in ('others', 'accidents', 'public benefit', 'events', 'food security', 'people or groups')")
           .drop("two_level")
-          .withColumn("two_level", lit("others"))
-          .select("article_id", "title", "content", "one_level", "two_level", "three_level")
+          .withColumn("two_level", lit("society others"))
+          .select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
       }
       others_df1.cache
       val others_df2 = {
-        class_df.filter("two_level in ('environment','medical','military', 'traffic')")
+        class_df.filter("two_level in ('environment', 'medical', 'military', 'traffic', 'national economy')")
           .drop("two_level")
-          .withColumn("two_level", lit("others"))
-          .select("article_id", "title", "content", "one_level", "two_level", "three_level")
+          .withColumn("two_level", lit("society others"))
+          .select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
       }
       others_df2.cache
-      val all_main = crime_df.union(law_df).union(politics_df).union(education_df).select("article_id", "title", "content", "one_level", "two_level", "three_level")
-      val others = others_df1.union(others_df2).select("article_id", "title", "content", "one_level", "two_level", "three_level")
+      val all_main = crime_df.union(law_df).union(politics_df).union(education_df).select("article_id", "url","title", "content", "one_level", "two_level", "three_level")
+      val others = others_df1.union(others_df2).select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
       val all = all_main.union(others).distinct()
       println(">>>>>>>>>>正在写入数据")
       all.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/national/national_all_v1")
