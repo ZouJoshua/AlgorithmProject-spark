@@ -16,6 +16,8 @@ object NewsSubCategory {
     import spark.implicits._
     val sc = spark.sparkContext
 
+
+    val dt = "2019-01-18"
     val newsPath = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour"
 
     //------------------------------------1 处理国内二级分类标注数据（4个分类） -----------------------------------------
@@ -159,7 +161,7 @@ object NewsSubCategory {
       val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
       val ori_df = {
         spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
-          .selectExpr("resource_id as article_id", "html", "title")
+          .selectExpr("resource_id as article_id", "html", "url", "title")
           .withColumn("content", getcontentUDF(col("html")))
           .drop("html")
       }
@@ -167,8 +169,8 @@ object NewsSubCategory {
       val class_df = nonull_df.join(ori_df, Seq("article_id"))
       val gossip_check_df = spark.read.json(gossip_check_path).dropDuplicates("article_id")
       val mark = gossip_check_df.withColumn("mark",lit(1)).select("article_id","mark")
-      val res = class_df.join(mark,Seq("article_id"),"left").filter("mark is null").drop("mark").select("article_id", "title", "content", "one_level", "two_level", "three_level")
-      val gossip_df = gossip_check_df.join(ori_df, Seq("article_id")) .select("article_id", "title", "content", "one_level", "two_level", "three_level")
+      val res = class_df.join(mark,Seq("article_id"),"left").filter("mark is null").drop("mark").select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+      val gossip_df = gossip_check_df.join(ori_df, Seq("article_id")) .select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
       val correct_df = gossip_df.union(res).distinct()
       val all_main = {
         val renameUDF = udf{(t:String) => t.replace("celebrity", "celebrity&gossip").replace("cartoon&comics","comic").replace("comics","comic").replace("comic","cartoon&comics")}
@@ -176,13 +178,13 @@ object NewsSubCategory {
             .withColumn("two_level_new", renameUDF(col("two_level")))
             .drop("two_level")
             .withColumnRenamed("two_level_new", "two_level")
-            .select("article_id", "title", "content", "one_level", "two_level", "three_level")
+            .select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
       }
       val others = {
         correct_df.filter("two_level in ('art+culture+history','dance', 'others','variety show','performance')")
           .drop("two_level")
           .withColumn("two_level", lit("others"))
-          .select("article_id", "title", "content", "one_level", "two_level", "three_level")
+          .select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
       }
       val all = all_main.union(others).distinct()
       println(">>>>>>>>>>正在写入数据")
@@ -466,10 +468,10 @@ object NewsSubCategory {
           .withColumn("content", getcontentUDF(col("html")))
           .drop("html")
       }
-      val df = {
+      val df1 = {
         val cleanUDF = udf{(word: String) => word.toLowerCase().replace("mobile phone","mobile-phone").replace("apps", "app").replace(" ", "").replace("mobile-phone", "mobile phone")}
         spark.read.json(tech_check_path)
-          .filter("top_category in ('tech', 'Tech','tech ') ")
+          .filter("top_category in ('tech', 'Tech','tech')")
           .withColumnRenamed("news_id", "article_id")
           .withColumn("one_level", cleanUDF(col("top_category")))
           .withColumn("two_level", cleanUDF(col("sub_category")))
@@ -477,10 +479,10 @@ object NewsSubCategory {
           .select("article_id","one_level", "two_level", "three_level").dropDuplicates("article_id")
         }
 
-      val result = {
+      val result1 = {
         val others = Seq("sci-tech", "internet", "reviews", "tablet", "software", "others")
         val replaceUDF = udf{(word:String) => if(others.contains(word)) "others" else word}
-        df.join(ori_df,Seq("article_id"))
+        df1.join(ori_df,Seq("article_id"))
           .filter("two_level in ('mobile phone','app', 'gadget','computer','sci-tech', 'internet', 'reviews', 'tablet', 'software', 'others')")
           .withColumn("two_level_new", replaceUDF(col("two_level")))
           .drop("two_level")
