@@ -143,7 +143,7 @@ object NewsSubCategory {
       val others = others_df1.union(others_df2).select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
       val all = all_main.union(others).distinct()
       println(">>>>>>>>>>正在写入数据")
-      all.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/national/national_all_v1")
+      all.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/national/national_all")
       println(">>>>>>>>>>写入数据完成")
     }
 
