@@ -1,7 +1,7 @@
 package com.apus.nlp
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions.{col, concat_ws, udf}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -12,7 +12,7 @@ object NewsSubCategoryCheck {
 
     //------------------------------------1 财经数据分类查看 -----------------------------------------
     //
-    def business_check(spark: SparkSession,
+    def business_fix(spark: SparkSession,
                        newsPath: String,
                        dt: String = "2019-01-15") = {
       val newsPath = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour"
@@ -95,4 +95,58 @@ object NewsSubCategoryCheck {
       }
       title_df.coalesce(1).saveAsTextFile("news_content/tmp/country_count")
     }
+
+
+    //------------------------------------3 娱乐数据清除重新训练模型 -----------------------------------------
+    //
+    def entertainment_check(spark: SparkSession) = {
+      val df = spark.read.json("news_content/sub_classification_check/entertainment*")
+      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.6").filter("two_level in ('celebrity&gossip','bollywood','tv','movie')").select("article_id")
+      val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.6").filter("two_level in ('celebrity&gossip','bollywood','tv','movie')").select("article_id")
+      val drop = drop1.union(drop2).withColumn("drop",lit(1))
+      val ori_df = spark.read.json("news_content/sub_classification/entertainment/entertainment_all")
+      val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
+      new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/entertainment/entertainment_all_v1")
+    }
+
+
+    //------------------------------------4 科技数据清除重新训练模型 -----------------------------------------
+    //
+
+    def tech_check(spark: SparkSession) = {
+      val df = spark.read.json("news_content/sub_classification_check/tech*")
+      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.5").filter("two_level in ('mobile phone')").select("article_id")
+      val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.7").filter("two_level in ('mobile phone','gadget')").select("article_id")
+      val drop = drop1.union(drop2).withColumn("drop",lit(1))
+      val ori_df = spark.read.json("news_content/sub_classification/tech/tech_all")
+      val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
+      new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/tech/tech_all_v1")
+
+    }
+
+    //------------------------------------5 汽车数据清除重新训练模型 -----------------------------------------
+    //
+
+    def auto_check(spark: SparkSession) = {
+      val df = spark.read.json("news_content/sub_classification_check/auto*")
+      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.6").select("article_id")
+      val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.7").select("article_id")
+      val drop = drop1.union(drop2).withColumn("drop", lit(1))
+      val ori_df = spark.read.json("news_content/sub_classification/auto/auto_all")
+      val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
+      new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/auto/auto_all_v1")
+    }
+    //------------------------------------6 财经数据清除重新训练模型 -----------------------------------------
+    //
+
+    def business_check(spark: SparkSession) = {
+      val df = spark.read.json("news_content/sub_classification_check/business*")
+      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.4").select("article_id")
+      val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.8").select("article_id")
+      val drop = drop1.union(drop2).withColumn("drop", lit(1))
+      val ori_df = spark.read.json("news_content/sub_classification/business/business_all")
+      val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
+      new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/business/business_all_v1")
+    }
   }
+}
