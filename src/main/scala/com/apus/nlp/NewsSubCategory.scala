@@ -462,7 +462,7 @@ object NewsSubCategory {
     //
     def tech_data_processer(spark: SparkSession,
                                 newsPath: String,
-                                dt: String = "2019-01-15") = {
+                                dt: String = "2019-01-21") = {
       import spark.implicits._
       val tech_check_path = "news_content/sub_classification/tech/tech_check"
 
@@ -484,7 +484,7 @@ object NewsSubCategory {
           .select("article_id","one_level", "two_level", "three_level").dropDuplicates("article_id")
         }
 
-      val result1 = {
+      val result = {
         val others = Seq("sci-tech", "internet", "reviews", "tablet", "software", "others")
         val replaceUDF = udf{(word:String) => if(others.contains(word)) "others" else word}
         df1.join(ori_df,Seq("article_id"))
