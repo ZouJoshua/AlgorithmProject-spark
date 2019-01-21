@@ -148,5 +148,19 @@ object NewsSubCategoryCheck {
       val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
       new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/business/business_all_v1")
     }
+
+    //------------------------------------7 国内数据清除重新训练模型 -----------------------------------------
+    //
+
+    def national_check(spark: SparkSession) = {
+      val df = spark.read.json("news_content/sub_classification_check/national*")
+      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.5").filter("two_level != 'society others'").select("article_id")
+      val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.6").filter("two_level != 'society others'").select("article_id")
+      val drop = drop1.union(drop2).withColumn("drop", lit(1))
+      val ori_df = spark.read.json("news_content/sub_classification/national/national_all")
+      val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
+      new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/national/national_all_v1")
+    }
+
   }
 }

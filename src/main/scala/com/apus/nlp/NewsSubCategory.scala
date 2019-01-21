@@ -148,10 +148,6 @@ object NewsSubCategory {
       all.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/national/national_all")
       println(">>>>>>>>>>写入数据完成")
 
-      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.5").filter("two_level != 'society others'").select("article_id")
-      val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.6").filter("two_level != 'society others'").select("article_id")
-      val drop = drop1.union(drop2).withColumn("drop",lit(1))
-
     }
 
     //------------------------------------4 处理娱乐分类标注数据（） -----------------------------------------
