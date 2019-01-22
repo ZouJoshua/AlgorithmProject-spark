@@ -161,6 +161,5 @@ object NewsSubCategoryCheck {
       val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
       new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/national/national_all_v1")
     }
-
   }
 }
