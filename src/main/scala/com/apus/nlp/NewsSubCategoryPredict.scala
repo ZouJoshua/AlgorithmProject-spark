@@ -82,6 +82,6 @@ object NewsSubCategoryPredict {
       }.toDF("article_id", "url", "title", "content", "one_level")
     }
     val out = df_res.filter("one_level in ('international', 'national','sports','auto or science', 'business', 'technology', 'auto', 'lifestyle', 'entertainment', 'science')").filter("content != ''")
-    out.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/predict/predict_all")
+    out.coalesce(1).write.format("json").mode("overwrite").save("news_sub_classification/predict/predict_all")
   }
 }

@@ -9,9 +9,9 @@ import org.jsoup.nodes.{Element, TextNode}
 /**
   * Created by Joshua on 2019-01-07
   */
-object NewsSubCategory {
+object NewsMarkedProcess {
   def main(args: Array[String]): Unit = {
-    val appName = "NewsSubCategoryProcesser"
+    val appName = "News-SubCategory-MarkedCorpus-Process"
     val spark = SparkSession.builder().appName(appName).getOrCreate()
     import spark.implicits._
     val sc = spark.sparkContext
@@ -66,7 +66,7 @@ object NewsSubCategory {
         class_df.filter("two_level = 'society' and three_level in ('others','people or groups','accidents','public benefit','events','food security')")
           .drop("two_level")
           .withColumn("two_level", lit("society others"))
-          .select("article_id", "title", "content", "one_level", "two_level", "three_level", "choose_keywords", "manual_keywords")
+          .select("article_id", "title", "content", "one_level", "two_level", "three_level")
       }
       others_df1.cache
       val others_df2 = {
@@ -508,7 +508,7 @@ object NewsSubCategory {
       val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
       val ori_df = {
         spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
-          .selectExpr("resource_id as article_id", "html", "title")
+          .selectExpr("resource_id as article_id", "html", "title", "url")
           .withColumn("content", getcontentUDF(col("html")))
           .drop("html")
       }
@@ -521,6 +521,7 @@ object NewsSubCategory {
           .withColumn("two_level", replaceUDF(col("three_level")))
           .drop("three_level")
           .withColumnRenamed("three_level_new", "three_level")
+          .select("article_id","url","title","content","one_level","two_level","three_level")
       }
       println(">>>>>>>>>>正在写入数据")
       sports_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/sports/sports_all")
