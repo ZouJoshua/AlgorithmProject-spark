@@ -664,6 +664,54 @@ object NewsMarkedProcess {
       println(">>>>>>>>>>写入数据完成")
     }
 
+    //------------------------------------9 生活分类标注数据（合并少2000样本的数据） -----------------------------------------
+    //
+
+    def lifestyle_data_processer_v2(spark: SparkSession,
+                                    newsPath: String,
+                                    dt: String = "2019-01-28") = {
+      import spark.implicits._
+
+//      val path = "/user/zoushuai/news_content/readmongo/dt=%s".format(dt)
+      val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
+      val df = spark.read.parquet(path)
+      val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
+      val ori_df = {
+        spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
+          .selectExpr("resource_id as article_id", "html", "title", "url")
+          .withColumn("content", getcontentUDF(col("html")))
+          .drop("html")
+      }
+      val lifestyle_df = df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time").filter("one_level = 'lifestyle'")
+      val lifestyle_result_df = {
+        val main_word = Seq("health", "fashion&trends", "travel", "food&wine", "relationships", "parenting",
+          "astrology")
+        val health_word = Seq("spirituality", "de-stress")
+        val groupUDF = udf{
+          (word1:String, word2:String) =>
+            if(!main_word.contains(word1)) "others"
+            else if(word1 == "health"&&health_word.contains(word2)) "others"
+            else word1
+        }
+        val replaceUDF = udf{(word: String) =>
+          word.toLowerCase()
+            .replace("fashion & trends", "fashion").replace("fashion","fashion&trends")
+            .replace("arts & culture","arts").replace("arts", "art").replace("culture", "art").replace("art","arts&culture")
+            .replace("food & wine","food").replace("food","food&wine").replace("home & garden","home").replace("home", "home&garden")
+            .replace("love&sex", "relationships").replace("nature-animals", "nature").replace("nature-plants","nature")
+            .replace("shopping guide(clothes &3c)","shopping guide").replace("shopping guide","shopping").replace("shopping", "shopping guide(clothes&3c)")
+            .replace("reigion & spirituality","reigion&spirituality")
+            .replace("zodiac", "astrology")
+        }
+        lifestyle_df.join(ori_df, Seq("article_id"))
+          .withColumnRenamed("two_level","two_level_old")
+          .withColumn("two_level", groupUDF(replaceUDF(col("two_level_old")), col("three_level")))
+          .select("article_id","url","title","content","one_level","two_level","three_level")
+      }
+      println(">>>>>>>>>>正在写入数据")
+      lifestyle_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/lifestyle/lifestyle_all_v2")
+      println(">>>>>>>>>>写入数据完成")
+    }
 
 
   }
