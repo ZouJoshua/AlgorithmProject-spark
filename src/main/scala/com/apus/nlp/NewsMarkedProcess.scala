@@ -514,7 +514,7 @@ object NewsMarkedProcess {
       }
       val sports_df = df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time").filter("one_level = 'sports'")
       val sports_result_df = {
-        val others = Seq("horse racing", "athletics", "kabaddi", "volleybal", "chess")
+        val others = Seq("horse racing", "athletics", "kabaddi", "volleyball", "chess")
         val replaceUDF = udf((word:String) => if(others.contains(word)) "others" else word)
         sports_df.join(ori_df, Seq("article_id"))
           .withColumnRenamed("two_level","three_level_new")
