@@ -136,15 +136,15 @@ object LightldaPreProcess {
     //------------------------------------ 2 生成文章词库vocab -----------------------------------------
 
     val vocab_DF = spark.read.textFile(word_ngrams)
-    val vocab = vocab_DF.map{
+    val vocab = vocab_DF.filter(!_.contains("<")).filter(!_.contains(";")).filter(!_.contains("=")).map{
       x =>
         val id_and_ngrams = x.split("\t")
         val split_num = id_and_ngrams.size
         val id = id_and_ngrams(0).trim().toString
         var ngrams = Array[String]()
         if(split_num == 2) {
-          ngrams = id_and_ngrams(1).replace("-LRB-", "").replace("-RRB-", "").replaceAll("\\s+", " ").split(" ").map(_.replace("_", " "))
-          ngrams
+            ngrams = id_and_ngrams(1).replaceAll("-LRB-", "").replace("-RRB-", "").replaceAll("\\s+", " ").split(" ").map(_.replace("_", " "))
+            ngrams
         }
         (id, ngrams)
     }.toDF("docID","ngrams").filter("size(ngrams) > 0").dropDuplicates("docID")  // 过滤掉分词为0、重复id的文章
@@ -160,8 +160,16 @@ object LightldaPreProcess {
         .map(word=>(word,1)).reduceByKey(_ + _)
         .toDF("word","count").filter("count < 10")
     }
-    val vocab_id = vocab.selectExpr("docID","explode(ngrams) as word")
-    val vocab_tmp = vocab_id.join(vocab_tf_less_10, Seq("word"),"left").filter("count is null")
+    val vocab_id = {
+      vocab.selectExpr("docID","explode(ngrams) as word").map{
+        row =>
+          val id = row.getAs[String]("docID")
+          val word = row.getAs[String]("word").replaceAll("\\-.+\\-","").replace("\t","").replace("\n","")
+          (id,word)
+      }.toDF("docID","word")
+    }
+
+    val vocab_tmp = vocab_id.join(vocab_tf_less_10, Seq("word"),"left").filter("word != ''").filter("count is null")
 
     val vocab_filtered1 = vocab_tmp.groupBy("docID").agg(collect_list(expr("word")))
     vocab_filtered1.cache
