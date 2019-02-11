@@ -207,9 +207,9 @@ object LightldaPreProcess {
         r =>
           val id = r.getAs[Long]("id")
           val word = r.getAs[String]("_1")
-          val id2word = Map( id -> word)
+          val id2word = Map( word -> id)
           (id,word,id2word)
-      }.toDF("wordID","word","id2word")
+      }.toDF("wordID","word","word2id")
       id_vocab
       }
     vocab_new.write.mode("overwrite").save("news_lightlda/docid_word_map")
@@ -221,6 +221,9 @@ object LightldaPreProcess {
     vocab_save.write.mode("overwrite").text("news_lightlda/vocabAll")
 
     //------------------------------------ 2 计算每篇文章词的词频 -----------------------------------------
+
+    val df_new = dfZipWithIndex(df)
+
 
     val docword = spark.read.parquet("news_lightlda/docid_ngrams")
     val word_tfidf_UCI = docword.flatMap{
