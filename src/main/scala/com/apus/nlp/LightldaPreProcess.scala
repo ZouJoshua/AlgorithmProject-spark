@@ -136,14 +136,14 @@ object LightldaPreProcess {
     //------------------------------------ 2 生成文章词库vocab -----------------------------------------
 
     val vocab_DF = spark.read.textFile(word_ngrams)
-    val vocab = vocab_DF.filter(!_.contains("<")).filter(!_.contains(";")).filter(!_.contains("=")).map{
+    val vocab = vocab_DF.filter(!_.contains("<")).filter(!_.contains(";")).filter(!_.contains("=")).filter(!_.contains(",")).map{
       x =>
         val id_and_ngrams = x.split("\t")
         val split_num = id_and_ngrams.size
         val id = id_and_ngrams(0).trim().toString
         var ngrams = Array[String]()
         if(split_num == 2) {
-            ngrams = id_and_ngrams(1).replaceAll("-LRB-", "").replace("-RRB-", "").replaceAll("\\s+", " ").split(" ").map(_.replace("_", " "))
+            ngrams = id_and_ngrams(1).replaceAll("-LRB-", "").replace("-RRB-", "").replaceAll("\\s+", " ").split(" ")
             ngrams
         }
         (id, ngrams)
@@ -164,14 +164,14 @@ object LightldaPreProcess {
       vocab.selectExpr("docID","explode(ngrams) as word").map{
         row =>
           val id = row.getAs[String]("docID")
-          val word = row.getAs[String]("word").replaceAll("\\-.+\\-","").replace("\t","").replace("\n","")
+          val word = row.getAs[String]("word").replaceAll("\\-.+\\-","")
           (id,word)
       }.toDF("docID","word")
     }
 
     val vocab_tmp = vocab_id.join(vocab_tf_less_10, Seq("word"),"left").filter("word != ''").filter("count is null")
 
-    val vocab_filtered1 = vocab_tmp.groupBy("docID").agg(collect_list(expr("word")))
+    val vocab_filtered1 = vocab_tmp.groupBy("docID").agg(collect_list(expr("word")).as("ngrams_filtered"))
     vocab_filtered1.cache
     // 先过滤掉词频低于10，写入文件
     vocab_filtered1.write.mode("overwrite").save("news_lightlda/docid_ngrams")
@@ -205,15 +205,17 @@ object LightldaPreProcess {
         .map(word=>(word,1)).reduceByKey(_ + _).toDF().coalesce(1).sort("_1")
       val id_vocab = dfZipWithIndex(vocab_sort).map{
         r =>
-          val id = r.getAs[Int]("id")
+          val id = r.getAs[Long]("id")
           val word = r.getAs[String]("_1")
           val id2word = Map( id -> word)
           (id,word,id2word)
       }.toDF("wordID","word","id2word")
       id_vocab
       }
+    vocab_new.write.mode("overwrite").save("news_lightlda/docid_word_map")
 
-    val vocab_save = vocab_new.coalesce(1).sort("wordID").select("word").repartition(1)
+    val vocab_new_df = spark.read.parquet("news_lightlda/docid_word_map")
+    val vocab_save = vocab_new_df.coalesce(1).sort("wordID").select("word")
     vocab_save.cache
     // 保存文章词库
     vocab_save.write.mode("overwrite").text("news_lightlda/vocabAll")
