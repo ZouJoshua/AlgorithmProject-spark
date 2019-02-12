@@ -119,8 +119,8 @@ object LightldaPreProcess {
     /**
       * lightlda数据预处理
       * lightlda训练模型需要两个文件(UCI格式的文件)
-      * 1. docword.news_content.txt （"docID"|"wordID"|"wordTF"）
-      * 2. vocab.news_content.txt （按照词id排列的词汇总量集合（唯一））
+      * 1. docword.news_content.txt （"docID"|"wordID"|"wordTF"） ===> lightlda_docword
+      * 2. vocab.news_content.txt （按照词id排列的词汇总量集合（唯一）） ===> lightlda_vocab
       * 或者直接用以上两个文件生成的libsvm文件和dict文件
       * 1.news_content.libsvm  (docID wordID1:wordTF wordID2:wordTF ...)文档号从1开始代指某篇文档，词id以0开始，与dict对应，次数为文档号对应的文档中该词出现的次数
       * 2.news_content.word_id.dict （wordID word wordTF）出现总数是所有文档出现总数
@@ -172,7 +172,6 @@ object LightldaPreProcess {
     val vocab_tmp = vocab_id.join(vocab_tf_less_10, Seq("word"),"left").filter("word != ''").filter("count is null")
 
     val vocab_filtered1 = vocab_tmp.groupBy("docID").agg(collect_list(expr("word")).as("ngrams_filtered"))
-    vocab_filtered1.cache
     // 先过滤掉词频低于10，写入文件
     vocab_filtered1.write.mode("overwrite").save("news_lightlda/docid_ngrams")
 
@@ -202,13 +201,13 @@ object LightldaPreProcess {
 
     val vocab_new = {
       val vocab_sort = df.select("ngrams_filtered").rdd.flatMap(r => r.getAs[Seq[String]]("ngrams_filtered"))
-        .map(word=>(word,1)).reduceByKey(_ + _).toDF().coalesce(1).sort("_1")
+        .map(word=>(word,1)).reduceByKey(_ + _).toDF().sort("_1")
       val id_vocab = dfZipWithIndex(vocab_sort).map{
         r =>
-          val id = r.getAs[Long]("id")
+          val id = r.getAs[Long]("id") - 1  // 词id 以0开始
           val word = r.getAs[String]("_1")
-          val id2word = Map( word -> id)
-          (id,word,id2word)
+          val word2id = Map( word -> id)
+          (id,word,word2id)
       }.toDF("wordID","word","word2id")
       id_vocab
       }
@@ -216,92 +215,21 @@ object LightldaPreProcess {
 
     val vocab_new_df = spark.read.parquet("news_lightlda/docid_word_map")
     val vocab_save = vocab_new_df.coalesce(1).sort("wordID").select("word")
-    vocab_save.cache
     // 保存文章词库
-    vocab_save.write.mode("overwrite").text("news_lightlda/vocabAll")
+    vocab_save.write.mode("overwrite").text("news_lightlda/lightlda_vocab")
 
     //------------------------------------ 2 计算每篇文章词的词频 -----------------------------------------
 
-    val df_new = dfZipWithIndex(df)
+    val df_docid = dfZipWithIndex(df)
+    val word_flat_UCI = df_docid.selectExpr("id as docID","docID as docID_ori", "explode(ngrams_filtered) as word")
 
+    val word_tfidf_UCI = word_flat_UCI.join(vocab_new_df, Seq("word"))
+    val word_filtered = word_tfidf_UCI.groupBy("docID", "wordID").agg(count("wordID").as("tf"))
+    word_filtered.write.mode(SaveMode.Overwrite).parquet("news_lightlda/tmp/lightlda_docword")
 
-    val docword = spark.read.parquet("news_lightlda/docid_ngrams")
-    val word_tfidf_UCI = docword.flatMap{
-      r =>
-        val docID = r.getAs[String]("docID")
-        //        val tfidf_ngrams = r.getAs[Seq[(Long,Double)]]("tf_Mul_idf")
-        val tfidf_ngrams:Seq[(Long,Double)] = r.getAs[Seq[Row]]("tf_Mul_idf").map(x => {(x.getLong(0), x.getDouble(1))})
-        var out = Seq.empty[(String, Long, Double)]
-        for(tfidf <- tfidf_ngrams){
-          out = out :+ (docID.toString, tfidf._1, tfidf._2)
-        }
-        out
-    }.toDF("docID","wordID","wordTFIDF")
-    val word_filtered = word_tfidf_UCI.drop("wordTFIDF").groupBy("docID", "wordID").agg(count("wordID").as("tf"))
-    val lightlda_docword_filtered = word_filtered.map{
-      r =>
-        val did = r.getAs[String]("docID")
-        val wid = r.getAs[Long]("wordID")
-        val tf = r.getAs[Long]("tf")
-        val txt = did + "|" + wid + "|" + tf
-        txt.toString
-    }
-    // 保存文件lightlda
-    lightlda_docword_filtered.repartition(1).write.mode(SaveMode.Overwrite).text("news_content/lightlda_docword_filtered/dt=2018-11-20")
+    val word_all = spark.read.parquet("news_lightlda/tmp/lightlda_docword")
 
-    // 22-26日所有tfidf
-    val docword_tfidf_allDF = {
-      spark.read.parquet(tfidfAllPath)
-        .withColumnRenamed("word","wordID")
-        .withColumnRenamed("idf","wordTFIDF")
-    }
-
-    //------------------------------------ 3 进行词筛选 -----------------------------------------
-    // 进行词筛选（选出每篇文章长度大于300，命中词大于15个的）
-
-    // val docwordDF = spark.read.parquet(ngramsPath)  // 单日计算
-    val docwordDF = spark.read.option("basePath", ngramsPath).parquet("/user/zoushuai/news_content/docword/dt=2018-11-2[2-6]")
-    val docwordAll = {
-      docwordDF
-        .selectExpr("article_id", "article_parsed as article", "content_ngram_idx", "size(content_ngram_idx) as gram_size", "length(article_parsed) as article_length")
-    }
-    val ngram_size = docwordAll.rdd.map{
-      r =>
-        val id  = r.getAs[String]("article_id")
-        val ngram = r.getAs[Seq[Long]]("content_ngram_idx").toSet.size
-        (id,ngram)
-    }.toDF("article_id", "ngram_size_new")
-
-    val  docwordFiltered  = {
-      docwordAll.join(ngram_size, Seq("article_id"))
-        .filter("article_length > 300")
-        .filter("ngram_size_new > 20 and ngram_size_new < 200")
-    }
-    // 过滤掉tfidf值较大和较小的(查看vocab的词)
-    val vocab_tfidf = vocab.join(docword_tfidf_allDF,Seq("wordID"))
-
-    // 增加索引列，并增加docid映射
-    val docwordIndex = dfZipWithIndex(docwordFiltered)
-    val idmapUDF = udf{(id:Long, article_id:String) => Map(id -> article_id)}
-    val docwordIndexMap = docwordIndex.withColumn("idmap", idmapUDF(col("id"),col("article_id")))
-    docwordIndexMap.cache
-
-    //------------------------------------ 4 生成lightlda-docword文件 -----------------------------------------
-    // 生成lightlda-docword文件（UCI格式）
-    val word_UCI = docwordIndexMap.flatMap{
-      r =>
-        val docID = r.getAs[Long]("id")
-        val ngrams = r.getAs[Seq[Long]]("content_ngram_idx")
-        var out = Seq.empty[(Long, Long)]
-        for(wordID <- ngrams){
-          out = out :+ (docID,wordID)
-        }
-        out
-    }.toDF("docID","wordID")
-    val word_save_tmp = word_UCI.groupBy("docID", "wordID").agg(count("wordID").as("tf")).sort("docID","wordID").coalesce(1)
-    word_save_tmp.cache
-    // 生成lightlda-docword文件
-    val lightlda_docword = word_save_tmp.map{
+    val lightlda_docword_filtered = word_all.coalesce(10).sort("docID").map{
       r =>
         val did = r.getAs[Long]("docID")
         val wid = r.getAs[Long]("wordID")
@@ -309,7 +237,46 @@ object LightldaPreProcess {
         val txt = did + "|" + wid + "|" + tf
         txt.toString
     }
-    lightlda_docword.write.mode(SaveMode.Overwrite).text("news_content/lightlda_docword/all_v2")
+    // 保存文件lightlda_docword
+    lightlda_docword_filtered.coalesce(10).write.mode(SaveMode.Overwrite).text("news_lightlda/lightlda_docword")
+
+
+    //------------------------------------ 3 直接生成libsvm文件和dict文件 -----------------------------------------
+
+    val word_dict = {
+      val word_sorted = word_tfidf_UCI.groupBy("wordID", "word").agg(count("word").as("tf")).coalesce(10).sort("wordID")
+      val word_sorted_str = word_sorted.map{
+        r =>
+          val wid = r.getAs[Long]("wordID")
+          val word = r.getAs[String]("word").replace("_", " ")
+          val tf = r.getAs[Long]("tf")
+          val txt = wid + "\t" + word + "\t" + tf
+          txt.toString
+      }
+      word_sorted_str
+    }
+    word_dict.coalesce(1).write.mode(SaveMode.Overwrite).text("news_lightlda/lightlda_dict")
+
+
+    val word_libsvm = {
+      val libsvm_sorted = word_tfidf_UCI.groupBy("docID", "wordID").agg(count("wordID").as("tf")).coalesce(10).sort("docID")
+      val libsvm = libsvm_sorted.map{
+        r =>
+          val did = r.getAs[Long]("docID")
+          val wid_tf = r.getAs[Long]("wordID").toString + ":" + r.getAs[Long]("tf").toString
+          (did, wid_tf)
+      }.toDF("docID", "wordID_tf")
+      val doc_libsvm = libsvm.groupBy("docID").agg(collect_list(expr("wordID_tf")).as("ngrams_id_tf")).coalesce(1).sort("docID")
+      val out = doc_libsvm.map{
+        r =>
+          val did = r.getAs[Long]("docID")
+          val ngrams = r.getAs[Seq[String]]("ngrams_id_tf")
+          val result = did.toString + "\t" + ngrams.mkString(" ")
+          result
+      }
+      out
+    }
+    word_libsvm.coalesce(1).write.mode(SaveMode.Overwrite).text("news_lightlda/lightlda_libsvm")
 
 
   }
