@@ -712,6 +712,49 @@ object NewsMarkedProcess {
       lifestyle_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/lifestyle/lifestyle_all_v2")
       println(">>>>>>>>>>写入数据完成")
     }
+    //------------------------------------10 世界分类标注数据 -----------------------------------------
+    //
+    def word_data_processer(spark: SparkSession,
+                                    newsPath: String = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour/",
+                                    dt: String = "2019-02-13") = {
+      import spark.implicits._
+
+      //      val path = "/user/zoushuai/news_content/readmongo/dt=%s".format(dt)
+      val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
+      val df = spark.read.parquet(path)
+      val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
+      val ori_df = {
+        spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
+          .selectExpr("resource_id as article_id", "html", "title", "url")
+          .withColumn("content", getcontentUDF(col("html")))
+          .drop("html")
+      }
+      val world_df = df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time").filter("one_level = 'World'").filter("three_level is not null")
+      val world_result_df = {
+//        val main_word = Seq("Politics", "politic", "Society", "Military", "others", "Terrorism",
+//          "Environment","crime","law","weather")
+        val main_word = Seq("Politics", "politic", "Society", "Military", "others", "Terrorism",
+          "Environment","weather")
+        val three_level_word = Seq("Diplomacy","Crime","Law", "Government")
+        val replaceUDF = udf{(word1: String, word2:String) =>
+          if(!main_word.contains(word1)) ""
+          else if (three_level_word.contains(word2)) word2.toLowerCase()
+          else word1.toLowerCase()
+            .replace("weather", "environment").replace("politics","politic")
+            .replace("politic","politics")
+        }
+        world_df.join(ori_df, Seq("article_id"))
+          .drop("one_level")
+          .withColumn("one_level",lit("international"))
+          .withColumnRenamed("two_level","two_level_old")
+          .withColumn("two_level", replaceUDF(col("two_level_old"),col("three_level")))
+          .filter("two_level != ''")
+          .select("article_id","url","title","content","one_level","two_level","three_level")
+      }
+      println(">>>>>>>>>>正在写入数据")
+      world_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/international/international_all")
+      println(">>>>>>>>>>写入数据完成")
+    }
 
 
   }
