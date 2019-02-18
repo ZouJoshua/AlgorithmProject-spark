@@ -248,7 +248,7 @@ object LightldaPreProcess {
       val word_sorted_str = word_sorted.map{
         r =>
           val wid = r.getAs[Long]("wordID")
-          val word = r.getAs[String]("word").replace("_", " ")
+          val word = r.getAs[String]("word")
           val tf = r.getAs[Long]("tf")
           val txt = wid + "\t" + word + "\t" + tf
           txt.toString

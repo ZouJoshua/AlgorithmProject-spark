@@ -1,11 +1,10 @@
-package com.apus.nlp
-
+package com.apus.mark
 
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 import org.jsoup.Jsoup
-import org.jsoup.nodes.{Element, Entities, TextNode}
+import org.jsoup.nodes.{Element, TextNode}
 
 /**
   * Created by Joshua on 2019-01-08
@@ -54,7 +53,6 @@ object NewsMarkProcess {
   def read_lifestyle_mark_article(spark:SparkSession,
                                   markPath:String):DataFrame = {
     // 读取需人工标注数据
-    import spark.implicits._
     val markDF = spark.read.json(markPath)
 
     val mark_id = markDF.select(col("news_id").cast(StringType),col("resource_id"))
@@ -271,21 +269,6 @@ object NewsMarkProcess {
     val dupdf = spark.read.json(dupsPath)
     val resavedf = result_filtered.join(dupdf,Seq("article_id"),"left").filter("dupmark is null").dropDuplicates("title")
     resavedf.write.mode(SaveMode.Overwrite).save(savePath)
-
-    //------------------------------------5 分组-----------------------------------------
-    //
-    val sportsdf = spark.read.parquet("news_content/writemongo/sports")
-    val cricket = sportsdf.filter("two_level = 'cricket'")
-    val football = sportsdf.filter("two_level = 'football'")
-    val other = sportsdf.filter("two_level not in ('cricket','football', 'ufc','snooker','sport star','canoeing', 'shooting','events','fashion','celebrity','gymnastics','sports star','company')")
-
-    val cricket_index = dfZipWithIndex(cricket)
-    val football_index = dfZipWithIndex(football)
-    val other_index = dfZipWithIndex(other)
-
-    cricket_index.write.mode(SaveMode.Overwrite).save("news_content/writemongo/tmp/sports/cricket")
-    football_index.write.mode(SaveMode.Overwrite).save("news_content/writemongo/tmp/sports/football")
-    other_index.write.mode(SaveMode.Overwrite).save("news_content/writemongo/tmp/sports/other")
 
 
   }

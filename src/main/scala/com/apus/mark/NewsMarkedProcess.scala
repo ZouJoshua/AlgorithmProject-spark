@@ -1,10 +1,9 @@
-package com.apus.nlp
+package com.apus.mark
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StringType
 import org.jsoup.Jsoup
-import org.jsoup.nodes.{Element, TextNode}
 
 /**
   * Created by Joshua on 2019-01-07
@@ -13,7 +12,6 @@ object NewsMarkedProcess {
   def main(args: Array[String]): Unit = {
     val appName = "News-SubCategory-MarkedCorpus-Process"
     val spark = SparkSession.builder().appName(appName).getOrCreate()
-    import spark.implicits._
     val sc = spark.sparkContext
 
 
@@ -459,7 +457,6 @@ object NewsMarkedProcess {
     def tech_data_processer(spark: SparkSession,
                                 newsPath: String,
                                 dt: String = "2019-01-21") = {
-      import spark.implicits._
       val tech_check_path = "news_content/sub_classification/tech/tech_check"
 
       val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
@@ -501,7 +498,6 @@ object NewsMarkedProcess {
     def sports_data_processer(spark: SparkSession,
                             newsPath: String,
                             dt: String = "2019-01-15") = {
-      import spark.implicits._
 
       val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
       val df = spark.read.parquet(path)
@@ -533,7 +529,6 @@ object NewsMarkedProcess {
     def auto_data_processer(spark: SparkSession,
                               newsPath: String,
                               dt: String = "2019-01-15") = {
-      import spark.implicits._
 
       val auto_path = "/user/caifuli/news/all_data/auto_classified"
       val auto_ori = spark.read.json(auto_path)
@@ -578,7 +573,6 @@ object NewsMarkedProcess {
     def lifestyle_data_processer(spark: SparkSession,
                             newsPath: String,
                             dt: String = "2019-01-28") = {
-      import spark.implicits._
 
       val path = "/user/zoushuai/news_content/readmongo/dt=%s".format(dt)
 //      val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
@@ -620,7 +614,6 @@ object NewsMarkedProcess {
     def lifestyle_data_processer_v1(spark: SparkSession,
                                  newsPath: String,
                                  dt: String = "2019-01-28") = {
-      import spark.implicits._
 
       val path = "/user/zoushuai/news_content/readmongo/dt=%s".format(dt)
 //      val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
@@ -670,7 +663,6 @@ object NewsMarkedProcess {
     def lifestyle_data_processer_v2(spark: SparkSession,
                                     newsPath: String,
                                     dt: String = "2019-01-28") = {
-      import spark.implicits._
 
 //      val path = "/user/zoushuai/news_content/readmongo/dt=%s".format(dt)
       val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
@@ -717,7 +709,6 @@ object NewsMarkedProcess {
     def word_data_processer(spark: SparkSession,
                                     newsPath: String = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour/",
                                     dt: String = "2019-02-13") = {
-      import spark.implicits._
 
       //      val path = "/user/zoushuai/news_content/readmongo/dt=%s".format(dt)
       val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)

@@ -1,14 +1,14 @@
-package com.apus.nlp
+package com.apus.mark
 
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.types.StringType
 import org.jsoup.Jsoup
-import org.jsoup.nodes.{Element, Entities, TextNode}
+import org.jsoup.nodes.{Element, TextNode}
 /**
   * Created by Joshua on 2019-01-23
   */
-object NewsMarkAllProcess {
+object NewsUnclassifiedMarkProcess {
 
   def main(args: Array[String]): Unit = {
 

@@ -1,4 +1,4 @@
-package com.apus.nlp
+package com.apus.mark
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
@@ -82,6 +82,20 @@ object NewsSubCategoryPredict {
       }.toDF("article_id", "url", "title", "content", "one_level")
     }
     val out = df_res.filter("one_level in ('international', 'national','sports','auto or science', 'business', 'technology', 'auto', 'lifestyle', 'entertainment', 'science')").filter("content != ''")
-    out.coalesce(1).write.format("json").mode("overwrite").save("news_sub_classification/predict/predict_all")
+    out.coalesce(1).write.format("json").mode("overwrite").save("news_sub_classification/predict/predict_mark_all")
+
+    //------------------------------------1 历史文章未标注二级类的文章预测-----------------------------------------
+    //
+
+    val history_unmark_path = "news_sub_classification/markCorpus/unmark_all"
+    val history_unmark = spark.read.parquet(history_unmark_path).selectExpr("article_id","article_url as url", "title", "content", "one_level")
+    history_unmark.coalesce(1).write.format("json").mode("overwrite").save("news_sub_classification/predict/predict_history_unmark_all")
+
+
+    //------------------------------------2 新文章世界、生活、体育的文章预测-----------------------------------------
+    //
+    val mark_new_path = "news_sub_classification/predict/predict_mark_all"
+    val mark_new = spark.read.json(mark_new_path).filter("one_level in ('lifestyle','sports','international')")
+    mark_new.coalesce(1).write.format("json").mode("overwrite").save("news_sub_classification/predict/predict_lifestyle_world")
   }
 }

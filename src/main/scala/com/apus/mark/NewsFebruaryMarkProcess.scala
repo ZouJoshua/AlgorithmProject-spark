@@ -1,7 +1,7 @@
-package com.apus.nlp
+package com.apus.mark
 
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession}
 import org.jsoup.Jsoup
 import org.jsoup.nodes.{Element, TextNode}
@@ -9,7 +9,7 @@ import org.jsoup.nodes.{Element, TextNode}
 /**
   * Created by Joshua on 2019-01-08
   */
-object NewsMarkProcess_new {
+object NewsFebruaryMarkProcess {
 
   def read_ori_article(spark: SparkSession,
                        articlePath: String,
@@ -47,7 +47,7 @@ object NewsMarkProcess_new {
         .withColumn("semantic_keywords", seqUDF(lit("")))
         .drop("sub_category")
         .filter("article_id is not null")
-          .filter("sub_category_proba < 0.8")
+        .filter("sub_category_proba < 0.8")  // 过滤出预测概率小于0.8的文章
         .filter("article_len > 100") // 增加过滤文章内容长度小于100字符的
     }.dropDuplicates("article_id")
     markall
