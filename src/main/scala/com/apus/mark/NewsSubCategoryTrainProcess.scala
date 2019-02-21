@@ -8,7 +8,7 @@ import org.jsoup.Jsoup
 /**
   * Created by Joshua on 2019-01-07
   */
-object NewsMarkedProcess {
+object NewsSubCategoryTrainProcess {
   def main(args: Array[String]): Unit = {
     val appName = "News-SubCategory-MarkedCorpus-Process"
     val spark = SparkSession.builder().appName(appName).getOrCreate()
@@ -605,18 +605,24 @@ object NewsMarkedProcess {
           .select("article_id","url","title","content","one_level","two_level","three_level")
       }
       println(">>>>>>>>>>正在写入数据")
-      lifestyle_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/lifestyle/lifestyle_all")
+      lifestyle_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/lifestyle/lifestyle_all_tmp")
       println(">>>>>>>>>>写入数据完成")
     }
     //------------------------------------9 生活分类标注数据（拆分健康和时尚） -----------------------------------------
-    //
-
+    // beauty 放入时尚
+    // 动物、植物、宠物放入nature/pets
+    // shopping guide
+    // 健康分出weight loss&diet、fitness&yoga
+    // 时尚分出garment&jewelry、skin care&makeup
+    // 取出 arts&culture
+    // 剩下的放others(events\home & garden\offbeat\DIY\humor)
     def lifestyle_data_processer_v1(spark: SparkSession,
                                  newsPath: String,
-                                 dt: String = "2019-01-28") = {
+                                 dt: String = "2019-02-21") = {
 
-      val path = "/user/zoushuai/news_content/readmongo/dt=%s".format(dt)
-//      val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
+     // val path = "/user/zoushuai/news_content/readmongo/dt=%s".format(dt)
+      val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
+      val newsPath = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour"
       val df = spark.read.parquet(path)
       val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
       val ori_df = {
@@ -625,26 +631,27 @@ object NewsMarkedProcess {
           .withColumn("content", getcontentUDF(col("html")))
           .drop("html")
       }
-      val lifestyle_df = df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time").filter("one_level = 'lifestyle'")
+      val lifestyle_df = df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time").filter("one_level = 'lifestyle'").filter("three_level is not null")
       val lifestyle_result_df = {
-        val main_word = Seq("health", "fashion&trends", "travel", "food&wine", "relationships", "parenting",
-          "astrology")
-        val health_word = Seq("disease","fitness & yoga", "weight loss & diet", "fitness", "yoga","diet", "weight loss")
+        val main_word = Seq("health", "fashion&trends", "travel", "food&wine", "relationships", "parenting", "beauty", "shopping guide", "nature&pets",
+          "astrology","arts&culture")
+        val health_word = Seq("fitness & yoga", "weight loss & diet", "fitness", "yoga","diet", "weight loss")
+        val fashion_word = Seq("skin care","makeup", "garment or jewelry")
         val groupUDF = udf{
           (word1:String, word2:String) =>
             if(!main_word.contains(word1)) "others"
             else if(word1 == "health"&&health_word.contains(word2)) word2.replace("fitness & yoga","fitness").replace("yoga", "fitness").replace("fitness", "fitness&yoga").replace("weight loss & diet","weight loss").replace("diet","weight loss").replace("weight loss", "weight loss&diet")
-            else if(word1 == "fashion&trends"&& word2 == "garment or jewelry") word2.replace("garment or jewelry","garment&jewelry")
+            else if(word1 == "fashion&trends"&& fashion_word.contains(word2)) word2.replace("garment or jewelry","garment&jewelry").replace("skin care","makeup").replace("makeup", "skin care&makeup")
             else word1
         }
         val replaceUDF = udf{(word: String) =>
           word.toLowerCase()
-            .replace("fashion & trends", "fashion").replace("fashion","fashion&trends")
+            .replace("fashion & trends", "fashion").replace("fashion","fashion&trends").replace("beauty","fashion&trends")
             .replace("arts & culture","arts").replace("arts", "art").replace("culture", "art").replace("art","arts&culture")
             .replace("food & wine","food").replace("food","food&wine").replace("home & garden","home").replace("home", "home&garden")
-            .replace("love&sex", "relationships").replace("nature-animals", "nature").replace("nature-plants","nature")
-            .replace("shopping guide(clothes &3c)","shopping guide").replace("shopping guide","shopping").replace("shopping", "shopping guide(clothes&3c)")
-            .replace("reigion & spirituality","reigion&spirituality")
+            .replace("love&sex", "relationships").replace("nature-animals", "nature").replace("nature-plants","nature").replace("pets", "nature").replace("nature","nature&pets")
+            .replace("shopping guide(clothes &3c)", "shopping guide").replace("shopping guide","shopping").replace("shopping", "shopping guide")
+            .replace("reigion & spirituality", "reigion&spirituality")
             .replace("zodiac", "astrology")
         }
         lifestyle_df.join(ori_df, Seq("article_id"))
@@ -653,7 +660,7 @@ object NewsMarkedProcess {
           .select("article_id","url","title","content","one_level","two_level","three_level")
       }
       println(">>>>>>>>>>正在写入数据")
-      lifestyle_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/lifestyle/lifestyle_all_v1")
+      lifestyle_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/lifestyle/lifestyle_all_tmp_v1")
       println(">>>>>>>>>>写入数据完成")
     }
 
@@ -662,9 +669,10 @@ object NewsMarkedProcess {
 
     def lifestyle_data_processer_v2(spark: SparkSession,
                                     newsPath: String,
-                                    dt: String = "2019-01-28") = {
+                                    dt: String = "2019-02-21") = {
 
 //      val path = "/user/zoushuai/news_content/readmongo/dt=%s".format(dt)
+      val newsPath = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour"
       val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
       val df = spark.read.parquet(path)
       val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
@@ -674,7 +682,7 @@ object NewsMarkedProcess {
           .withColumn("content", getcontentUDF(col("html")))
           .drop("html")
       }
-      val lifestyle_df = df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time").filter("one_level = 'lifestyle'")
+      val lifestyle_df = df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time").filter("one_level = 'lifestyle'").filter("three_level is not null")
       val lifestyle_result_df = {
         val main_word = Seq("health", "fashion&trends", "travel", "food&wine", "relationships", "parenting",
           "astrology")
@@ -701,7 +709,7 @@ object NewsMarkedProcess {
           .select("article_id","url","title","content","one_level","two_level","three_level")
       }
       println(">>>>>>>>>>正在写入数据")
-      lifestyle_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/lifestyle/lifestyle_all_v2")
+      lifestyle_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/lifestyle/lifestyle_all")
       println(">>>>>>>>>>写入数据完成")
     }
     //------------------------------------10 世界分类标注数据 -----------------------------------------
@@ -729,7 +737,7 @@ object NewsMarkedProcess {
         val three_level_word = Seq("Diplomacy","Crime","Law", "Government")
         val replaceUDF = udf{(word1: String, word2:String) =>
           if(!main_word.contains(word1)) ""
-          else if (three_level_word.contains(word2)) word2.toLowerCase()
+          //else if (three_level_word.contains(word2)) word2.toLowerCase()
           else word1.toLowerCase()
             .replace("weather", "environment").replace("politics","politic")
             .replace("politic","politics")

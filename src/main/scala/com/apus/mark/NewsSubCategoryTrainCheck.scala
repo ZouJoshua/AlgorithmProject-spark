@@ -1,4 +1,4 @@
-package com.apus.nlp
+package com.apus.mark
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
@@ -7,7 +7,7 @@ import org.apache.spark.sql.types.StringType
 /**
   * Created by Joshua on 2019-01-16
   */
-object NewsSubCategoryCheck {
+object NewsSubCategoryTrainCheck {
   def main(args: Array[String]): Unit = {
 
     //------------------------------------1 财经数据分类查看 -----------------------------------------
@@ -161,5 +161,30 @@ object NewsSubCategoryCheck {
       val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
       new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/national/national_all_v1")
     }
+    //------------------------------------8 生活数据清除重新训练模型 -----------------------------------------
+    //
+    def lifestyle_check(spark: SparkSession) = {
+      val df = spark.read.json("news_content/sub_classification_check/lifestyle*")
+      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.8").filter("two_level in ('health','fashion&trends')").select("article_id")
+      val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.6").select("article_id")
+      val drop_df = drop1.union(drop2).withColumn("drop", lit(1))
+      val ori_df = spark.read.json("news_content/sub_classification/lifestyle/lifestyle_all")
+      val new_ori = ori_df.join(drop_df, Seq("article_id"), "left").filter("drop is null").drop("drop")
+      new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/lifestyle/lifestyle_all_v1")
+    }
+
+
+    //------------------------------------9 世界数据清除重新训练模型 -----------------------------------------
+    //
+    def international_check(spark: SparkSession) = {
+      val df = spark.read.json("news_content/sub_classification_check/international*")
+      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.7").filter("two_level in('politics','society')").select("article_id")
+      val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.7").filter("two_level not in ('terrorism','environment')").select("article_id")
+      val drop_df = drop1.union(drop2).withColumn("drop", lit(1))
+      val ori_df = spark.read.json("news_content/sub_classification/international/international_all")
+      val new_ori = ori_df.join(drop_df, Seq("article_id"), "left").filter("drop is null").drop("drop")
+      new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/international/international_all_v1")
+    }
+
   }
 }
