@@ -730,14 +730,14 @@ object NewsSubCategoryTrainProcess {
       }
       val world_df = df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time").filter("one_level = 'World'").filter("three_level is not null")
       val world_result_df = {
-//        val main_word = Seq("Politics", "politic", "Society", "Military", "others", "Terrorism",
-//          "Environment","crime","law","weather")
         val main_word = Seq("Politics", "politic", "Society", "Military", "others", "Terrorism",
-          "Environment","weather")
-        val three_level_word = Seq("Diplomacy","Crime","Law", "Government")
+          "Environment","crime","law","weather")
+//        val main_word = Seq("Politics", "politic", "Society", "Military", "others", "Terrorism",
+//          "Environment","weather")
+        val three_level_word = Seq("Diplomacy","Crime","Law", "Government","Accidents/Mishappening")
         val replaceUDF = udf{(word1: String, word2:String) =>
           if(!main_word.contains(word1)) ""
-          //else if (three_level_word.contains(word2)) word2.toLowerCase()
+          else if (three_level_word.contains(word2)) word2.toLowerCase().replace("accidents/mishappening","accidents&mishappening")
           else word1.toLowerCase()
             .replace("weather", "environment").replace("politics","politic")
             .replace("politic","politics")
@@ -751,7 +751,8 @@ object NewsSubCategoryTrainProcess {
           .select("article_id","url","title","content","one_level","two_level","three_level")
       }
       println(">>>>>>>>>>正在写入数据")
-      world_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/international/international_all")
+//      world_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/international/international_all")
+      world_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/international/international_all_tmp")
       println(">>>>>>>>>>写入数据完成")
     }
 

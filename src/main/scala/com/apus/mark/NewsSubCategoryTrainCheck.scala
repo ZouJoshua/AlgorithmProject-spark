@@ -165,9 +165,10 @@ object NewsSubCategoryTrainCheck {
     //
     def lifestyle_check(spark: SparkSession) = {
       val df = spark.read.json("news_content/sub_classification_check/lifestyle*")
-      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.8").filter("two_level in ('health','fashion&trends')").select("article_id")
+      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.7").filter("two_level ='health'").select("article_id")
       val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.6").select("article_id")
-      val drop_df = drop1.union(drop2).withColumn("drop", lit(1))
+      val drop3 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.32").filter("two_level != 'health'").select("article_id")
+      val drop_df = drop1.union(drop2).union(drop3).withColumn("drop", lit(1))
       val ori_df = spark.read.json("news_content/sub_classification/lifestyle/lifestyle_all")
       val new_ori = ori_df.join(drop_df, Seq("article_id"), "left").filter("drop is null").drop("drop")
       new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/lifestyle/lifestyle_all_v1")
