@@ -610,10 +610,11 @@ object NewsSubCategoryTrainProcess {
     }
     //------------------------------------9 生活分类标注数据（拆分健康和时尚） -----------------------------------------
     // beauty 放入时尚
-    // 动物、植物、宠物放入nature/pets
-    // shopping guide
+    // 动物、植物、宠物放入nature/pets(第二次迭代去掉，人工标注错误率大，e.g. 原文为狮子座的香奈儿，珠宝 人工标为动物。机器分类正确，
+    // 文章讲芦荟可以用做卸妆等材料。主要讲护肤品，人工标注为植物,机器预测正确
+    // shopping guide(第二次迭代去掉，主要为衣物和3c，容易和珠宝服饰混)
     // 健康分出weight loss&diet、fitness&yoga
-    // 时尚分出garment&jewelry、skin care&makeup
+    // 时尚分出skin care&makeup
     // 取出 arts&culture
     // 剩下的放others(events\home & garden\offbeat\DIY\humor)
     def lifestyle_data_processer_v1(spark: SparkSession,
@@ -636,12 +637,12 @@ object NewsSubCategoryTrainProcess {
         val main_word = Seq("health", "fashion&trends", "travel", "food&wine", "relationships", "parenting", "beauty", "shopping guide", "nature&pets",
           "astrology","arts&culture")
         val health_word = Seq("fitness & yoga", "weight loss & diet", "fitness", "yoga","diet", "weight loss")
-        val fashion_word = Seq("skin care","makeup", "garment or jewelry")
+        val fashion_word = Seq("skin care","makeup")
         val groupUDF = udf{
           (word1:String, word2:String) =>
             if(!main_word.contains(word1)) "others"
             else if(word1 == "health"&&health_word.contains(word2)) word2.replace("fitness & yoga","fitness").replace("yoga", "fitness").replace("fitness", "fitness&yoga").replace("weight loss & diet","weight loss").replace("diet","weight loss").replace("weight loss", "weight loss&diet")
-            else if(word1 == "fashion&trends"&& fashion_word.contains(word2)) word2.replace("garment or jewelry","garment&jewelry").replace("skin care","makeup").replace("makeup", "skin care&makeup")
+            else if(word1 == "fashion&trends"&& fashion_word.contains(word2)) word2.replace("skin care","makeup").replace("makeup", "skin care&makeup")
             else word1
         }
         val replaceUDF = udf{(word: String) =>
@@ -657,10 +658,11 @@ object NewsSubCategoryTrainProcess {
         lifestyle_df.join(ori_df, Seq("article_id"))
           .withColumnRenamed("two_level","two_level_old")
           .withColumn("two_level", groupUDF(replaceUDF(col("two_level_old")), col("three_level")))
+          .filter("two_level not in ('nature&pets','shopping guide')")
           .select("article_id","url","title","content","one_level","two_level","three_level")
       }
       println(">>>>>>>>>>正在写入数据")
-      lifestyle_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/lifestyle/lifestyle_all_tmp_v1")
+      lifestyle_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/lifestyle/lifestyle_all")
       println(">>>>>>>>>>写入数据完成")
     }
 
