@@ -615,8 +615,7 @@ object NewsSubCategoryTrainProcess {
     // shopping guide(第二次迭代去掉，主要为衣物和3c，容易和珠宝服饰混)
     // 健康分出weight loss&diet、fitness&yoga
     // 时尚分出skin care&makeup
-    // 取出 arts&culture
-    // 剩下的放others(events\home & garden\offbeat\DIY\humor)
+    // 剩下的放others(events\home & garden\offbeat\DIY\humor\arts&culture)
     def lifestyle_data_processer_v1(spark: SparkSession,
                                  newsPath: String,
                                  dt: String = "2019-02-21") = {
@@ -635,7 +634,7 @@ object NewsSubCategoryTrainProcess {
       val lifestyle_df = df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time").filter("one_level = 'lifestyle'").filter("three_level is not null")
       val lifestyle_result_df = {
         val main_word = Seq("health", "fashion&trends", "travel", "food&wine", "relationships", "parenting", "beauty", "shopping guide", "nature&pets",
-          "astrology","arts&culture")
+          "astrology")
         val health_word = Seq("fitness & yoga", "weight loss & diet", "fitness", "yoga","diet", "weight loss")
         val fashion_word = Seq("skin care","makeup")
         val groupUDF = udf{
@@ -736,10 +735,14 @@ object NewsSubCategoryTrainProcess {
           "Environment","crime","law","weather")
 //        val main_word = Seq("Politics", "politic", "Society", "Military", "others", "Terrorism",
 //          "Environment","weather")
-        val three_level_word = Seq("Diplomacy","Crime","Law", "Government","Accidents/Mishappening")
+        val three_level_word = Seq("Diplomacy","Crime","Law", "Government","Accidents/Mishappening","People/ Groups","People/Groups")
         val replaceUDF = udf{(word1: String, word2:String) =>
           if(!main_word.contains(word1)) ""
-          else if (three_level_word.contains(word2)) word2.toLowerCase().replace("accidents/mishappening","accidents&mishappening")
+          else if (three_level_word.contains(word2))
+            word2.toLowerCase()
+              .replace("accidents/mishappening","accidents&mishappening")
+              .replace("people/ groups","people&groups")
+              .replace("people/groups", "people&groups")
           else word1.toLowerCase()
             .replace("weather", "environment").replace("politics","politic")
             .replace("politic","politics")
@@ -758,6 +761,55 @@ object NewsSubCategoryTrainProcess {
       println(">>>>>>>>>>写入数据完成")
     }
 
+
+    //------------------------------------11 世界分类标注数据(二次分组) -----------------------------------------
+    //将政治、社会中的people group单独分出来
+    def word_data_processer_v1(spark: SparkSession,
+                            newsPath: String = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour/",
+                            dt: String = "2019-02-13") = {
+
+      //      val path = "/user/zoushuai/news_content/readmongo/dt=%s".format(dt)
+      val newsPath: String = "/user/hive/warehouse/apus_dw.db/dw_news_data_hour/"
+      val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
+      val df = spark.read.parquet(path)
+      val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
+      val ori_df = {
+        spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_dw.db/dw_news_data_hour/dt=2018-11-2[2-6]")
+          .selectExpr("resource_id as article_id", "html", "title", "url")
+          .withColumn("content", getcontentUDF(col("html")))
+          .drop("html")
+      }
+      val world_df = df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time").filter("one_level = 'World'").filter("three_level is not null")
+      val world_result_df = {
+        val main_word = Seq("Politics", "politic", "Society", "Military", "others", "Terrorism",
+                  "Environment","weather")
+        val three_level_word = Seq("Crime","Law", "People/ Groups","People/Groups")
+        val replaceUDF = udf{(word1: String, word2:String) =>
+          if(!main_word.contains(word1)) ""
+          else if (three_level_word.contains(word2))
+            word2.toLowerCase()
+              .replace("accidents/mishappening","accidents&mishappening")
+              .replace("people/ groups","people&groups")
+              .replace("people/groups", "people&groups")
+              .replace("crime","society")
+              .replace("law","society")
+          else word1.toLowerCase()
+            .replace("weather", "environment").replace("politics","politic")
+            .replace("politic","politics").replace("crime","society").replace("law","society")
+        }
+        world_df.join(ori_df, Seq("article_id"))
+          .drop("one_level")
+          .withColumn("one_level",lit("international"))
+          .withColumnRenamed("two_level","two_level_old")
+          .withColumn("two_level", replaceUDF(col("two_level_old"),col("three_level")))
+          .filter("two_level != ''")
+          .select("article_id","url","title","content","one_level","two_level","three_level")
+      }
+      println(">>>>>>>>>>正在写入数据")
+      //      world_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/international/international_all")
+      world_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/international/international_all")
+      println(">>>>>>>>>>写入数据完成")
+    }
 
   }
 }
