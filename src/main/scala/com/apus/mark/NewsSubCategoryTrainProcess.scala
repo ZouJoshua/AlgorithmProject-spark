@@ -783,19 +783,17 @@ object NewsSubCategoryTrainProcess {
       val world_result_df = {
         val main_word = Seq("Politics", "politic", "Society", "Military", "others", "Terrorism",
                   "Environment","weather")
-        val three_level_word = Seq("Crime","Law", "People/ Groups","People/Groups")
+//        val three_level_word = Seq("Crime","Policies and Regulations","Diplomacy","Government")
+        val three_level_word = Seq("Crime")
         val replaceUDF = udf{(word1: String, word2:String) =>
           if(!main_word.contains(word1)) ""
           else if (three_level_word.contains(word2))
-            word2.toLowerCase()
-              .replace("accidents/mishappening","accidents&mishappening")
-              .replace("people/ groups","people&groups")
-              .replace("people/groups", "people&groups")
-              .replace("crime","society")
-              .replace("law","society")
+            word2.toLowerCase().replace("policies and regulations","policies&regulations")
+              .replace("government","diplomacy")
+              .replace("diplomacy","government&diplomacy")
           else word1.toLowerCase()
             .replace("weather", "environment").replace("politics","politic")
-            .replace("politic","politics").replace("crime","society").replace("law","society")
+            .replace("politic","politics")
         }
         world_df.join(ori_df, Seq("article_id"))
           .drop("one_level")
@@ -806,8 +804,9 @@ object NewsSubCategoryTrainProcess {
           .select("article_id","url","title","content","one_level","two_level","three_level")
       }
       println(">>>>>>>>>>正在写入数据")
-      //      world_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/international/international_all")
-      world_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/international/international_all")
+      world_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/international/international_all_7")
+      //      world_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/international/international_all_9")
+//      world_result_df.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/international/international_all")
       println(">>>>>>>>>>写入数据完成")
     }
 
