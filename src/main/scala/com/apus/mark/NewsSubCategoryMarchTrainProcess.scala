@@ -46,7 +46,6 @@ object NewsSubCategoryMarchTrainProcess {
       val ori_df = {
         spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_ai.db/recommend/article/article_data_merged/dt=*")
           .selectExpr("resource_id as article_id", "article", "title", "url")
-          .withColumn("content", getcontentUDF(col("article.html")))
       }
 
       // 历史标注数据处理
@@ -72,32 +71,42 @@ object NewsSubCategoryMarchTrainProcess {
           .select("article_id","one_level", "two_level", "three_level")
       }
 
-      // 合并数据
-      val tech = tech_old.union(tech_new).distinct()
-
-      val result = {
-        val others = Seq("mobile phone", "others", "app", "internet", "gadget", "computer","sci-tech")
-        val groupUDF = udf{(word:String) => if (!others.contains(word)) "others" else word}
-        val replaceUDF = udf{
-          (word:String) =>
+      val replaceUDF = udf{
+        (word:String) =>
           word.replace("mobile phones","mobile phone").replace("gadgets","gadget")
             .replace("mobile apps","app").replace("mobile app","app").replace("apps","app")
-            .replace("laptops","laptop").replace("laptop","computer").replace("PCs","computer")
-            .replace("televisions", "tv").replace("IT","internet").replace("tv", "sci-tech")
-            .replace("tablets","tablet")
-        }
-        tech.join(ori_df,Seq("article_id")).filter("two_level is not null")
+            .replace("laptops","laptop").replace("laptop","computer").replace("PCs","computer").replace("tablets","tablet").replace("tablet","computer")
+            .replace("televisions", "tv").replace("IT","internet")
+      }
+
+      // 合并数据
+      val tech_tmp = tech_old.union(tech_new).distinct()
+      val tech = {
+        tech_tmp.join(ori_df, Seq("article_id"))
+          .filter("two_level is not null")
           .filter("two_level not in ('lifestylehacks','stock', 'invest','science','tech', 'industry')")
-          .withColumn("two_level_new", groupUDF(replaceUDF(col("two_level"))))
+          .withColumn("two_level_new", replaceUDF(col("two_level")))
+          .drop("two_level").withColumnRenamed("two_level_new", "two_level")
+          .withColumn("content", getcontentUDF(col("article.html"))).drop("article")
+      }
+      // 先写入文件处理
+      tech.write.mode("overwrite").save("news_content/sub_classification/tmp/tech_update_all")
+
+      val result = {
+        val main_words = Seq("mobile phone", "others", "app", "internet", "gadget", "computer","intelligent hardware", "wearable device")
+        val gadget_words = Seq("intelligent hardware", "wearable device")
+        val groupUDF = udf{(word:String) => if (!main_words.contains(word)) "others" else if (gadget_words.contains(word)) "gadget" else word}
+
+        val all = spark.read.parquet("news_content/sub_classification/tmp/tech_update_all")
+        all.withColumn("two_level_new", groupUDF(col("two_level")))
           .drop("three_level")
-          .withColumn("three_level", groupUDF(replaceUDF(col("two_level"))))
+          .withColumn("three_level", groupUDF(col("two_level")))
           .drop("two_level")
           .withColumnRenamed("two_level_new", "two_level")
       }
+
       println(">>>>>>>>>>正在写入数据")
-      result.write.mode("overwrite").save("news_content/sub_classification/tmp/tech_all")
-      val redf = spark.read.parquet("news_content/sub_classification/tmp/tech_all")
-      redf.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/tech/tech_update")
+      result.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/tech/tech_update")
       println(">>>>>>>>>>写入数据完成")
 
     }
@@ -111,7 +120,7 @@ object NewsSubCategoryMarchTrainProcess {
       val ori_df = {
         spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_ai.db/recommend/article/article_data_merged/dt=*")
           .selectExpr("resource_id as article_id", "article", "title", "url")
-          .withColumn("content", getcontentUDF(col("article.html")))
+          .dropDuplicates("article_id")
       }
 
       // 历史标注数据处理
@@ -119,17 +128,19 @@ object NewsSubCategoryMarchTrainProcess {
       val business_check_path2 = "news_content/sub_classification/business/business_check2"
 
 
-      val cleanUDF = udf{(word: String) =>
+      val cleanUDF = udf{(word: String) => if (word!=""||word!=null)
         word.toLowerCase()
           .replace("personal finance", "personal-finance")
           .replace("real estate","real-estate").replace("real-eatate", "real-estate")
           .replace("stocks","stock").replace("banking","bank").replace("bank","banking")
           .replace("markets", "market").replace("starups", "startups")
           .replace("oil price","oil-price")
+          .replace("blokchain","blockchain")
           .replace(" ","")
           .replace("investment","invest")
           .replace("commodity", "commodities")
           .replace("carrer", "career")
+      else ""
       }
       val df1 = {
         spark.read.json(business_check_path1)
@@ -154,14 +165,11 @@ object NewsSubCategoryMarchTrainProcess {
       val business_old = {
         df1.union(df2).distinct()
           .dropDuplicates("article_id").filter("two_level != ''")
-          .map{row =>
-            val id = row.getAs[Int]("article_id").toString
-            val one = row.getAs[String]("one_level")
-            val two = row.getAs[String]("two_level")
-            val three = row.getAs[String]("three_level")
-            (id,one,two,three)
-          }.toDF("article_id","one_level","two_level","three_level")
-      }
+          .select("article_id","one_level","two_level","three_level")
+      }.filter("two_level in ('company','industry', 'stock', 'market', 'money', 'banking', 'invest', 'economy'" +
+        "'personal-finance', 'commodities', 'career', 'tax', 'oil-price', 'real-estate', 'trading'," +
+        " 'gold', 'people', 'law', 'crime', 'property', 'insurance', 'index', 'regulation', 'finance'" +
+        "'startups', 'bond', 'e-commerce','others','auction','consumption', 'credit', 'blockchain')")
 
       // 年前新标注数据处理
       val dt = "2019-02-22"
@@ -169,12 +177,18 @@ object NewsSubCategoryMarchTrainProcess {
       val cms_df = spark.read.parquet(path)
       val business_new = {
         cms_df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time")
-          .filter("one_level = 'business'")
+          .filter("one_level = 'business'").filter("two_level is not null")
+            .withColumnRenamed("two_level","two_level_new")
+            .withColumn("two_level",cleanUDF(col("two_level_new")))
+//          .drop("three_level").withColumn("three_level",lit("others"))
           .select("article_id","one_level", "two_level", "three_level")
       }
 
       // 合并数据
-      val business = business_old.union(business_new).distinct()
+      val business_tmp = business_old.union(business_new).distinct()
+      val business = business_tmp.join(ori_df,Seq("article_id")).withColumn("content", getcontentUDF(col("article.html"))).drop("article")
+      // 先写入文件处理
+      business.write.mode("overwrite").save("news_content/sub_classification/tmp/business_all")
 
       val result = {
         val finance = Seq("finance", "money", "banking", "oil-price", "gold")
@@ -189,15 +203,9 @@ object NewsSubCategoryMarchTrainProcess {
             else if(industry_economic.contains(word)) "industry economic"
             else "others"
         }
-        val replaceUDF = udf{
-          (word:String) =>
-            word.toLowerCase().replace("markets","market").replace("market","markets")
-              .replace("oil price","oil-price").replace("blokchain","blockchain").replace("fund","fond")
-        }
 
-        val all = business.join(ori_df,Seq("article_id")).withColumn("two_level_new", replaceUDF(col("two_level"))).drop("two_level")
+        val all = spark.read.parquet("news_content/sub_classification/tmp/business_all")
         val company = all.filter("two_level = 'company'").limit(12000).select("article_id","url","title","content","one_level","two_level","three_level")
-
         val others = all.filter("two_level in ('industry', 'stock', 'market', 'money', 'banking', 'invest', 'personal-finance', 'commodities', 'career', 'tax', 'oil-price', 'real-estate', 'trading', 'gold', 'people', 'law', 'crime', 'property', 'insurance', 'index', 'startups', 'bond', 'e-commerce')")
           .withColumn("two_level_new", groupUDF(col("two_level")))
           .drop("two_level")
@@ -206,21 +214,72 @@ object NewsSubCategoryMarchTrainProcess {
         company.union(others)
       }
 
-
-
-
       println(">>>>>>>>>>正在写入数据")
-      result.write.mode("overwrite").save("news_content/sub_classification/tmp/business_all")
-      val redf = spark.read.parquet("news_content/sub_classification/tmp/business_all")
-      redf.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/business/business_update")
+      all.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/business/business_update")
       println(">>>>>>>>>>写入数据完成")
 
     }
 
+    //------------------------------------4 更新娱乐二级分类 -----------------------------------------
+    // 1.去除two_level 为null
+    // 2.取出internet
+    // 3.其他放为others(量不足)
     def update_entertainment_process(spark: SparkSession,
                                 newsPath: String="/user/hive/warehouse/apus_dw.db/dw_news_data_hour",
                                 dt: String="2019-02-21") = {
 
+
+      val newsPath = "/user/hive/warehouse/apus_ai.db/recommend/article/article_data_merged"
+      val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
+      val ori_df = {
+        spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_ai.db/recommend/article/article_data_merged/dt=*")
+          .selectExpr("resource_id as article_id", "article", "title", "url")
+          .dropDuplicates("article_id")
+      }
+
+      // 历史标注数据处理（包含部分cms的数据，放到年前新标注里面统一处理）
+      val gossip_check_path = "news_content/sub_classification/entertainment/gossip_check"
+      val gossip_check_df = spark.read.json(gossip_check_path).dropDuplicates("article_id").select("article_id","one_level", "two_level", "three_level")
+
+      // 年前新标注数据处理
+      val dt = "2019-02-22"
+      val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
+      val df = spark.read.parquet(path)
+      val entertainment_new_old = {
+        df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time")
+          .filter("one_level = 'entertainment'").dropDuplicates("article_id")
+          .select("article_id","one_level", "two_level", "three_level")
+      }
+
+      // 合并数据
+      val entertainment_tmp = entertainment_new_old.union(gossip_check_df).distinct()
+      val entertainment = entertainment_tmp.join(ori_df,Seq("article_id")).withColumn("content", getcontentUDF(col("article.html"))).drop("article")
+
+
+      val cleanUDF = udf{(word: String) => if (word!=""||word!=null)
+        word.toLowerCase()
+          .replace("celebrity", "celebrity&gossip")
+          .replace("cartoon&comics","comic").replace("comics","comic").replace("comic","cartoon&comics")
+      else ""
+      }
+
+      val all_main = {
+        entertainment.filter("two_level in ('bollywood','celebrity','tv','movie','music','comic','comics','hollywood','cartoon&comics')")
+          .withColumn("two_level_new", cleanUDF(col("two_level")))
+          .drop("two_level")
+          .withColumnRenamed("two_level_new", "two_level")
+          .select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+      }
+      val others = {
+        entertainment.filter("two_level in ('art+culture+history','dance', 'others','variety show','performance')")
+          .drop("two_level")
+          .withColumn("two_level", lit("others"))
+          .select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+      }
+      val all = all_main.union(others).distinct()
+      println(">>>>>>>>>>正在写入数据")
+      all.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/entertainment/entertainment_all")
+      println(">>>>>>>>>>写入数据完成")
 
     }
 

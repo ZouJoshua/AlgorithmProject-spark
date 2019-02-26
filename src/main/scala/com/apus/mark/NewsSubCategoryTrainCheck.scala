@@ -126,9 +126,10 @@ object NewsSubCategoryTrainCheck {
 
     def tech_check_update(spark: SparkSession) = {
       val df = spark.read.json("news_content/sub_classification_check/tech_update*")
-      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.7").filter("two_level in ('mobile phone')").select("article_id")
-      val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.6").filter("two_level in ('mobile phone','gadget', 'sci-tech&company','internet')").select("article_id")
-      val drop = drop1.union(drop2).withColumn("drop",lit(1))
+      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.6").filter("two_level in ('mobile phone','others')").select("article_id")
+      val drop2 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.4").filter("two_level not in ('mobile phone','others')").select("article_id")
+      val drop3 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.7").select("article_id")
+      val drop = drop1.union(drop2).union(drop3).withColumn("drop",lit(1))
       val ori_df = spark.read.json("news_content/sub_classification/tech/tech_update")
       val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
       new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/tech/tech_update_v1")
