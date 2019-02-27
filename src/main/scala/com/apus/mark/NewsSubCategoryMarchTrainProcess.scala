@@ -191,31 +191,40 @@ object NewsSubCategoryMarchTrainProcess {
       business.write.mode("overwrite").save("news_content/sub_classification/tmp/business_all")
 
       val result = {
-        val finance = Seq("finance", "money", "banking", "oil-price", "gold")
-        val investment = Seq("invest", "personal-finance", "real-estate", "career","property")
-        val market = Seq("commodities", "market", "stock", "trading")
-        val industry_economic = Seq("people", "industry")
-        val groupUDF = udf{
-          (word:String) =>
-            if(finance.contains(word)) "finance"
-            else if(investment.contains(word)) "investment"
-            else if(market.contains(word)) "market"
-            else if(industry_economic.contains(word)) "industry economic"
-            else "others"
+        val company = Seq("startups", "people")
+        val crime_law = Seq("crime", "regulation", "law")
+        val stock = Seq("bond")
+        val career = Seq("people")
+        val trading_commodities = Seq("trading", "commodities")
+        val economy = Seq("index")
+        val property = Seq("property","credit","consumption")
+        val others = Seq("auction", "blockchain")
+        val groupUDF = udf {
+          (word: String) =>
+            if (company.contains(word)) "company"
+            else if (crime_law.contains(word)) "crime&law"
+            else if (stock.contains(word)) "stock"
+            else if (career.contains(word)) "career"
+            else if (trading_commodities.contains(word)) "commodities&trading"
+            else if (economy.contains(word)) "economy"
+            else if (property.contains(word)) "personal-finance"
+            else if (others.contains(word)) "others"
+            else word
         }
 
-        val all = spark.read.parquet("news_content/sub_classification/tmp/business_all")
-        val company = all.filter("two_level = 'company'").limit(12000).select("article_id","url","title","content","one_level","two_level","three_level")
-        val others = all.filter("two_level in ('industry', 'stock', 'market', 'money', 'banking', 'invest', 'personal-finance', 'commodities', 'career', 'tax', 'oil-price', 'real-estate', 'trading', 'gold', 'people', 'law', 'crime', 'property', 'insurance', 'index', 'startups', 'bond', 'e-commerce')")
-          .withColumn("two_level_new", groupUDF(col("two_level")))
-          .drop("two_level")
-          .withColumnRenamed("two_level_new", "two_level")
-          .select("article_id","url","title","content","one_level","two_level","three_level")
-        company.union(others)
+        val all = {
+          spark.read.parquet("news_content/sub_classification/tmp/business_all").drop("three_level")
+            .withColumnRenamed("two_level", "three_level")
+            .withColumn("two_level", groupUDF(col("three_level")))
+        }
+        val company_limit = all.filter("two_level = 'company'").limit(15000).select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val others_limit = all.filter("two_level != 'company'").select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val out = company_limit.union(others_limit).distinct()
+        out
       }
-
       println(">>>>>>>>>>正在写入数据")
-      all.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/business/business_update")
+//      result.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/business/business_update")
+      result.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/business/business_update_tmp")
       println(">>>>>>>>>>写入数据完成")
 
     }

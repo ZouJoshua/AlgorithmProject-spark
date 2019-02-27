@@ -55,6 +55,30 @@ object NewsMarchMarkProcess {
     markall
   }
 
+  def read_march_mark_article(spark:SparkSession,
+                        markPath:String):DataFrame = {
+    // 读取需人工标注数据
+    val markDF = spark.read.json(markPath).selectExpr("article_id", "url as article_url", "title", "content", "top_category as one_level", "sub_category as two_level", "sub_category_proba")
+    val lifestyle = markDF.filter("one_level = 'lifestyle'").filter("two_level not in ('health','travel')").filter("sub_category_proba < 0.7").select("article_id", "article_url", "title", "content", "one_level", "two_level")
+    val business = markDF.filter("one_level = 'business'").filter("two_level not in ('economy','career','stock','market','industry','company','others')").filter("sub_category_proba < 0.6").select("article_id", "article_url", "title", "content", "one_level", "two_level")
+    val national = markDF.filter("one_level = 'national'").filter("two_level = 'others'").filter("sub_category_proba < 0.5").select("article_id", "article_url", "title", "content", "one_level", "two_level")
+    val auto = markDF.filter("one_level = 'auto'").filter("two_level = 'others'").select("article_id", "article_url", "title", "content", "one_level", "two_level")
+    val entertainment = markDF.filter("one_level = 'entertainment'").filter("two_level in ('others')").filter("sub_category_proba < 0.7").select("article_id", "article_url", "title", "content", "one_level", "two_level")
+    val tech = markDF.filter("one_level = 'technology'").filter("two_level in ('gadget','others')").filter("sub_category_proba < 0.5").select("article_id", "article_url", "title", "content", "one_level", "two_level")
+    val all = lifestyle.union(business).union(national).union(auto).union(entertainment).union(tech)
+
+    val markall = {
+      val seqUDF = udf((t: String) => Seq.empty[String])
+      markDF.selectExpr("article_id", "title", "article_url", "one_level", "two_level", "length(content) as article_len")
+        .withColumn("three_level", lit("others"))
+        .withColumn("need_double_check", lit(0))
+        .withColumn("semantic_keywords", seqUDF(lit("")))
+        .filter("article_id is not null")
+        .filter("article_len > 100") // 增加过滤文章内容长度小于100字符的
+    }.dropDuplicates("article_id")
+    markall
+  }
+
   def mark_html_with_entitykeywords(articleDF: DataFrame,
                                     mark: DataFrame,
                                     entitywords: DataFrame): DataFrame = {
@@ -100,9 +124,10 @@ object NewsMarchMarkProcess {
         .join(articleDF,Seq("article_id"))
         .withColumn("entity", nullUDF(col("entity_keywords")))
         .drop("entity_keywords")
-        .withColumn("article", tagMarkUDF(col("html"), col("entity")))
+        .withColumnRenamed("html","article")
+//        .withColumn("article", tagMarkUDF(col("html"), col("entity")))
         .withColumnRenamed("entity","entity_keywords")
-        .drop("html")
+        //.drop("html")
     }.distinct
     result
   }
@@ -143,12 +168,22 @@ object NewsMarchMarkProcess {
     val savePath = "/user/zoushuai/news_content/writemongo/March_mark"
     val dupsPath = "news_content/dropdups/dropdups.all_150_5"
 
+    //三月剩余30w标注
+    val marchMarkPath = "news_sub_classification/predict/predict_unmark_part*"
+    val marchSavePath = "/user/zoushuai/news_content/writemongo/March_mark_last"
+
+
     //------------------------------------1 读取原始文章-----------------------------------------
     //
     val articleDF = read_ori_article(spark, newsPath, dt)
     //------------------------------------2 处理标注文章-----------------------------------------
     //
-    val markDF = read_mark_article(spark, markPath1, markPath2)
+    // 三月标注前10w
+    // val markDF = read_mark_article(spark, markPath1, markPath2)
+    // 三月标注后30w
+    val markDF = read_march_mark_article(spark, marchMarkPath)
+
+
 
     //------------------------------------3 标注关键词并-----------------------------------------
     //

@@ -127,8 +127,8 @@ object NewsSubCategoryTrainCheck {
     def tech_check_update(spark: SparkSession) = {
       val df = spark.read.json("news_content/sub_classification_check/tech_update*")
       val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.6").filter("two_level in ('mobile phone','others')").select("article_id")
-      val drop2 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.4").filter("two_level not in ('mobile phone','others')").select("article_id")
-      val drop3 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.7").select("article_id")
+      val drop2 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.3").filter("two_level not in ('mobile phone','others')").select("article_id")
+      val drop3 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.5").select("article_id")
       val drop = drop1.union(drop2).union(drop3).withColumn("drop",lit(1))
       val ori_df = spark.read.json("news_content/sub_classification/tech/tech_update")
       val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
@@ -153,6 +153,16 @@ object NewsSubCategoryTrainCheck {
 
     def business_check(spark: SparkSession) = {
       val df = spark.read.json("news_content/sub_classification_check/business*")
+      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.4").select("article_id")
+      val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.8").select("article_id")
+      val drop = drop1.union(drop2).withColumn("drop", lit(1))
+      val ori_df = spark.read.json("news_content/sub_classification/business/business_all")
+      val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
+      new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/business/business_all_v1")
+    }
+
+    def business_update_check(spark: SparkSession) = {
+      val df = spark.read.json("news_content/sub_classification_check/business_update*")
       val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.4").select("article_id")
       val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.8").select("article_id")
       val drop = drop1.union(drop2).withColumn("drop", lit(1))
