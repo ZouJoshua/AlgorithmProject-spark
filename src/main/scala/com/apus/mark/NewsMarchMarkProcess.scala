@@ -69,7 +69,7 @@ object NewsMarchMarkProcess {
 
     val markall = {
       val seqUDF = udf((t: String) => Seq.empty[String])
-      markDF.selectExpr("article_id", "title", "article_url", "one_level", "two_level", "length(content) as article_len")
+      all.selectExpr("article_id", "title", "article_url", "one_level", "two_level", "length(content) as article_len")
         .withColumn("three_level", lit("others"))
         .withColumn("need_double_check", lit(0))
         .withColumn("semantic_keywords", seqUDF(lit("")))
