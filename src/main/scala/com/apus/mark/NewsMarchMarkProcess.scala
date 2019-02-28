@@ -59,9 +59,9 @@ object NewsMarchMarkProcess {
                         markPath:String):DataFrame = {
     // 读取需人工标注数据
     val markDF = spark.read.json(markPath).selectExpr("article_id", "url as article_url", "title", "content", "top_category as one_level", "sub_category as two_level", "sub_category_proba")
-    val lifestyle = markDF.filter("one_level = 'lifestyle'").filter("two_level not in ('health','travel')").filter("sub_category_proba < 0.7").select("article_id", "article_url", "title", "content", "one_level", "two_level")
-    val business = markDF.filter("one_level = 'business'").filter("two_level not in ('economy','career','stock','market','industry','company','others')").filter("sub_category_proba < 0.6").select("article_id", "article_url", "title", "content", "one_level", "two_level")
-    val national = markDF.filter("one_level = 'national'").filter("two_level = 'others'").filter("sub_category_proba < 0.5").select("article_id", "article_url", "title", "content", "one_level", "two_level")
+    val lifestyle = markDF.filter("one_level = 'lifestyle'").filter("two_level not in ('health','travel')").filter("sub_category_proba < 0.75").select("article_id", "article_url", "title", "content", "one_level", "two_level")
+    val business = markDF.filter("one_level = 'business'").filter("two_level not in ('economy','career','stock','market','industry','company','others')").filter("sub_category_proba < 0.7").select("article_id", "article_url", "title", "content", "one_level", "two_level")
+    val national = markDF.filter("one_level = 'national'").filter("two_level = 'others'").filter("sub_category_proba < 0.55").select("article_id", "article_url", "title", "content", "one_level", "two_level")
     val auto = markDF.filter("one_level = 'auto'").filter("two_level = 'others'").select("article_id", "article_url", "title", "content", "one_level", "two_level")
     val entertainment = markDF.filter("one_level = 'entertainment'").filter("two_level in ('others')").filter("sub_category_proba < 0.7").select("article_id", "article_url", "title", "content", "one_level", "two_level")
     val tech = markDF.filter("one_level = 'technology'").filter("two_level in ('gadget','others')").filter("sub_category_proba < 0.5").select("article_id", "article_url", "title", "content", "one_level", "two_level")
