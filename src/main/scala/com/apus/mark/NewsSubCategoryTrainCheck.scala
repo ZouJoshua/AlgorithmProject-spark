@@ -111,10 +111,10 @@ object NewsSubCategoryTrainCheck {
 
     def entertainment_update_check(spark: SparkSession) = {
       val df = spark.read.json("news_content/sub_classification_check/entertainment_update*")
-      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.6").filter("two_level in ('celebrity&gossip','bollywood','tv','movie')").select("article_id")
-      val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.6").filter("two_level in ('celebrity&gossip','bollywood','tv','movie')").select("article_id")
+      val drop1 = df.filter("two_level = predict_two_level").filter("predict_two_level_proba < 0.4").filter("two_level in ('celebrity', 'gossip','bollywood','tv','movie')").select("article_id")
+      val drop2 = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.7").filter("two_level in ('celebrity', 'gossip','bollywood','tv','movie')").select("article_id")
       val drop = drop1.union(drop2).withColumn("drop",lit(1))
-      val ori_df = spark.read.json("news_content/sub_classification/entertainment/entertainment_all")
+      val ori_df = spark.read.json("news_content/sub_classification/entertainment/entertainment_update_tmp")
       val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
       new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/entertainment/entertainment_all_v1")
     }
@@ -179,9 +179,10 @@ object NewsSubCategoryTrainCheck {
       val ori_df = spark.read.json("news_content/sub_classification/business/business_update_tmp")
       val two_level_replace = df.filter("two_level != predict_two_level").filter("predict_two_level_proba > 0.7").selectExpr("article_id","predict_two_level as two_level")
       val ori_replace = ori_df.drop("two_level").join(two_level_replace, Seq("article_id")).select("article_id","url","title","content","one_level","two_level","three_level")
-      val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop")
+      val new_ori = ori_df.join(drop, Seq("article_id"), "left").filter("drop is null").drop("drop").select("article_id","url","title","content","one_level","two_level","three_level")
       val result = new_ori.union(ori_replace).distinct()
-      new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/business/business_update_tmp_v1")
+//      new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/business/business_update_tmp_v1")
+      result.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/business/business_update_tmp_v1")
     }
 
     //------------------------------------7 国内数据清除重新训练模型 -----------------------------------------
