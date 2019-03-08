@@ -9,7 +9,7 @@ import org.jsoup.Jsoup
 /**
   * Created by Joshua on 2019-01-23
   */
-object NewsMarkedAllProcess {
+object NewsFebruaryTrainCorpusProcess {
 
   def main(args: Array[String]): Unit = {
     val appName = "News-SubCategory-MarkedCorpus-Process"

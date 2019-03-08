@@ -169,9 +169,10 @@ object NewsMarchMarkProcess {
     val dupsPath = "news_content/dropdups/dropdups.all_150_5"
 
     //三月剩余30w标注
-    val marchMarkPath = "news_sub_classification/predict/predict_unmark_part*"
-    val marchSavePath = "/user/zoushuai/news_content/writemongo/March_mark_last"
-
+//    val marchMarkPath = "news_sub_classification/predict/predict_unmark_part[3,4]"
+    val marchAddMarkPath = "news_sub_classification/predict/predict_unmark_part0000[0,1,2]"
+//    val marchSavePath = "/user/zoushuai/news_content/writemongo/March_mark_last"
+    val marchAddSavePath = "/user/zoushuai/news_content/writemongo/March_mark_last"
 
     //------------------------------------1 读取原始文章-----------------------------------------
     //
@@ -181,7 +182,9 @@ object NewsMarchMarkProcess {
     // 三月标注前10w
     // val markDF = read_mark_article(spark, markPath1, markPath2)
     // 三月标注后30w
-    val markDF = read_march_mark_article(spark, marchMarkPath)
+//    val markDF = read_march_mark_article(spark, marchMarkPath)
+    // 三月标注补充（30W）
+    val markDF = read_march_mark_article(spark, marchAddMarkPath)
 
 
 
@@ -193,6 +196,10 @@ object NewsMarchMarkProcess {
     val entitywordsDF = entitywordsDF1.union(entitywordsDF2).distinct()
 
     val result = mark_html_with_entitykeywords(articleDF, markDF, entitywordsDF)
+
+    result.write.save(marchAddSavePath)
+
+
     // 过滤部分不符合条件的数据
     val result_filter_kw = result.filter(size($"entity_keywords") > 0 && length($"article") > 100)
     val result_filtered = result_filter_kw.filter(!(!$"article".contains("apus-entity-words") && size($"entity_keywords") > 0))

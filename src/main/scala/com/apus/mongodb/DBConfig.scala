@@ -9,7 +9,7 @@ import java.text.SimpleDateFormat
 object DBConfig {
   // replace the following with the right values for your MongoDB installation
   // test environment of mongodb
-  val host = "10.10.40.122"
+  val host = "127.0.0.1"
   val port = 27017
   val database = "article_repo"
   val readCollection = "operate_res"

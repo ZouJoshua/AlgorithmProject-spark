@@ -8,7 +8,7 @@ import org.jsoup.nodes.{Element, TextNode}
 /**
   * Created by Joshua on 2019-01-23
   */
-object NewsUnclassifiedMarkProcess {
+object NewsFebruaryMarkPreProcess {
 
   def main(args: Array[String]): Unit = {
 

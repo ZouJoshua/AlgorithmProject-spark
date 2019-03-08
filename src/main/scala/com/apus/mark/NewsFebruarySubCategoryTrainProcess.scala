@@ -8,7 +8,7 @@ import org.jsoup.Jsoup
 /**
   * Created by Joshua on 2019-01-07
   */
-object NewsSubCategoryTrainProcess {
+object NewsFebruarySubCategoryTrainProcess {
   def main(args: Array[String]): Unit = {
     val appName = "News-SubCategory-MarkedCorpus-Process"
     val spark = SparkSession.builder().appName(appName).getOrCreate()
