@@ -29,6 +29,56 @@ object NewsMarchSubCategoryTrainProcess {
                                    newsPath: String="/user/hive/warehouse/apus_dw.db/dw_news_data_hour",
                                    dt: String="2019-02-21") = {
 
+      val newsPath = "/user/hive/warehouse/apus_ai.db/recommend/article/article_data_merged"
+      val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
+      val ori_df = {
+        spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_ai.db/recommend/article/article_data_merged/dt=*")
+          .selectExpr("resource_id as article_id", "article", "title", "url")
+      }
+      // 历史标注均在cms中
+      val dt = "2019-03-12"
+      val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
+      val df = spark.read.parquet(path)
+      val national_cms_df = {
+        df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time")
+          .filter("one_level = 'national'")
+          .select("article_id","one_level", "two_level", "three_level")
+      }
+
+      // 写入文件
+      val national = {
+        national_cms_df.join(ori_df, Seq("article_id"))
+          .filter("two_level is not null").filter("three_level is not null")
+          .withColumn("content", getcontentUDF(col("article.html"))).drop("article")
+      }
+      national.write.mode("overwrite").save("news_content/sub_classification/tmp/national_update_all")
+
+      val result = {
+        val main_words = Seq("crime", "law", "government-jobs")
+        val other_words = Seq("national economy")
+        val groupUDF = udf{(word1:String, word2:String) => if (main_words.contains(word2)) word2.replace("policies and regulations","policies&regulations") else if(other_words.contains(word1)) "others" else word1}
+
+        val all = {
+          spark.read.parquet("news_content/sub_classification/tmp/national_update_all")
+            .withColumn("two_level_new", groupUDF(col("two_level"), col("three_level")))
+            .drop("two_level")
+            .withColumnRenamed("two_level_new", "two_level")
+        }
+        val politics_limit = all.filter("two_level not in ('government-jobs','environment','others','military','traffic','medical')").filter("two_level = 'politics' and three_level in ('people or groups','others')").limit(20000).select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val society_limit = all.filter("two_level not in ('government-jobs','environment','others','military','traffic','medical')").filter("two_level = 'society' and three_level = 'people or groups'").limit(10000).select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val crime_limit = all.filter("two_level not in ('government-jobs','environment','others','military','traffic','medical')").filter("two_level = 'crime'").limit(15000).select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val law_limit = all.filter("two_level not in ('government-jobs','environment','others','military','traffic','medical')").filter("two_level = 'law'").limit(15000).select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val others_limit = all.filter("two_level not in ('government-jobs','environment','others','military','traffic','medical')").filter("two_level != 'law' and two_level != 'crime' and three_level not in ('people or groups','others')").select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val main_category = all.filter("two_level in ('government-jobs','environment','others','military','traffic','medical')").select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val out = main_category.union(politics_limit).union(society_limit).union(others_limit).union(crime_limit).union(law_limit).distinct()
+        out
+      }
+
+      println(">>>>>>>>>>正在写入数据")
+      result.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/national/national_update")
+      println(">>>>>>>>>>写入数据完成")
+
+
 
     }
 
@@ -344,7 +394,7 @@ object NewsMarchSubCategoryTrainProcess {
       }
 
       // 年前新标注数据处理
-      val dt = "2019-02-28"
+      val dt = "2019-03-12"
       val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
       val cms_df = spark.read.parquet(path)
       val auto_new = {
@@ -368,7 +418,7 @@ object NewsMarchSubCategoryTrainProcess {
         val groupUDF = udf {
           (word: String) =>
             if (other.contains(word)) "others"
-            else word
+            else word.replace("autoindustry","auto industry").replace("autoshow","auto show").replace("cycling","bike")
         }
         val all = {
           spark.read.parquet("news_content/sub_classification/tmp/auto_all")
@@ -383,7 +433,98 @@ object NewsMarchSubCategoryTrainProcess {
       result.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/auto/auto_update_tmp")
       println(">>>>>>>>>>写入数据完成")
 
+      // 单独分出自行车和motor
+
+      val df = spark.read.json("news_content/sub_classification_check/tmp/auto_bike*")
+
+      val groupUDF = udf {
+        (word: String,predict:String) =>
+          if(predict=="motor"||word.contains("motorcycle")||word.contains("motorcycle")) "motor"
+          else if (predict=="bike"||word.contains("bike")) "bike"
+          else if(word.contains("cycling"))  "bike"
+          else "others"
+      }
+      val bike = {
+        df.filter("two_level = 'others'").withColumn("two_level_new",groupUDF(col("content"),col("predict_two_level")))
+          .drop("two_level")
+          .withColumnRenamed("two_level_new","two_level")
+          .select("article_id","url","title","content","one_level","two_level","three_level")
+      }
+
+      val result_new = {
+        val main_category = df.filter("two_level != 'others'").select("article_id","url","title","content","one_level","two_level","three_level")
+        val out = main_category.union(bike).distinct()
+        val other = Seq("auto industry","auto show")
+        val groupNewUDF = udf {
+          (word: String) =>
+            if (other.contains(word)) "others"
+            else word
+        }
+        out.withColumnRenamed("two_level", "two_level_new")
+          .withColumn("two_level", groupNewUDF(col("two_level_new")))
+          .drop("two_level_new")
+      }
+      println(">>>>>>>>>>正在写入数据")
+      result_new.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/auto/auto_update")
+      println(">>>>>>>>>>写入数据完成")
+
     }
+
+    //------------------------------------6 更新体育二级分类 -----------------------------------------
+    // 1.去除three_level 为null
+    // 2.抽取three_level 为crime、law
+    // 3.抽取two_level 为politics、education
+    // 4.其他放为others(量不足)
+
+    def update_sports_process(spark: SparkSession,
+                                newsPath: String="/user/hive/warehouse/apus_dw.db/dw_news_data_hour",
+                                dt: String="2019-03-12") = {
+
+      val newsPath = "/user/hive/warehouse/apus_ai.db/recommend/article/article_data_merged"
+      val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
+      val ori_df = {
+        spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_ai.db/recommend/article/article_data_merged/dt=*")
+          .selectExpr("resource_id as article_id", "article", "title", "url")
+      }
+      // 历史标注均在cms中
+      val dt = "2019-03-12"
+      val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
+      val df = spark.read.parquet(path)
+      val sports_cms_df = {
+        df.drop("_class", "_id", "article_doc_id", "is_right", "op_time", "server_time")
+          .filter("one_level = 'sports'")
+          .select("article_id","one_level", "two_level", "three_level")
+      }
+
+      // 写入文件
+      val sports = {
+        sports_cms_df.join(ori_df, Seq("article_id"))
+          .filter("two_level is not null").filter("three_level is not null")
+          .withColumn("content", getcontentUDF(col("article.html"))).drop("article")
+      }
+      sports.write.mode("overwrite").save("news_content/sub_classification/tmp/sports_all")
+
+      val result = {
+        val all = {
+          spark.read.parquet("news_content/sub_classification/tmp/sports_all")
+            .withColumnRenamed("two_level", "two_level_new")
+            .withColumnRenamed("three_level","two_level")
+            .withColumnRenamed("two_level_new","three_level")
+        }
+        val football_limit = all.filter("two_level = 'football'").limit(15000).select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val cricket_limit = all.filter("two_level  = 'cricket'").limit(15000).select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val main_category = all.filter("two_level not in ('football','football')").select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val out = main_category.union(football_limit).union(cricket_limit).distinct()
+//        out
+        all
+      }
+
+      println(">>>>>>>>>>正在写入数据")
+      result.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/sports/sports_update")
+      println(">>>>>>>>>>写入数据完成")
+
+    }
+
 
   }
 }
