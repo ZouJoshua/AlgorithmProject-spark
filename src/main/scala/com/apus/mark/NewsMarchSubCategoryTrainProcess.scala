@@ -112,7 +112,7 @@ object NewsMarchSubCategoryTrainProcess {
       }
 
       // 年前新标注数据处理
-      val dt = "2019-02-22"
+      val dt = "2019-03-12"
       val path = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
       val df = spark.read.parquet(path)
       val tech_new = {
@@ -669,9 +669,14 @@ object NewsMarchSubCategoryTrainProcess {
             .withColumnRenamed("two_level","two_level_old")
             .withColumn("two_level", replaceUDF(col("two_level_old"),col("three_level")))
             .filter("two_level != ''")
-            .select("article_id","url","title","content","one_level","two_level","three_level")
+            .selectExpr("article_id","url","title","content","one_level","two_level","three_level", "length(content) as len")
         }
-        all
+        val politics_limit = all.filter("two_level = 'politics'").filter("len < 6000").limit(20000).select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val society_limit = all.filter("two_level  = 'society'").filter("len < 6000").limit(20000).select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val main_category = all.filter("two_level not in ('politics','society')").select("article_id", "url", "title", "content", "one_level", "two_level", "three_level")
+        val out = main_category.union(politics_limit).union(society_limit).distinct()
+          out
+//        all
       }
 
       println(">>>>>>>>>>正在写入数据")
