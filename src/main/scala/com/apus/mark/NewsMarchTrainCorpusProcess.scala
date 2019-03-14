@@ -26,6 +26,7 @@ object NewsMarchTrainCorpusProcess {
     def train_corpus_process(spark: SparkSession) = {
 
       // 人工标注处理数据
+      val science_path = "/user/caifuli/news/all_data/science"
       val business_check_path1 = "news_sub_classification/trainCorpus/marked/business_check1"
       val business_check_path2 = "news_sub_classification/trainCorpus/marked/business_check2"
       val auto_path = "news_sub_classification/trainCorpus/marked/auto_classified"
@@ -42,7 +43,7 @@ object NewsMarchTrainCorpusProcess {
       }
 
       // cms标注文章
-      val dt = "2019-03-07"
+      val dt = "2019-03-14"
       val markedpath = "/user/hive/warehouse/apus_ai.db/recommend/article/readmongo/dt=%s".format(dt)
 
       val cleanUDF = udf{(category:String, word: String) =>
@@ -92,6 +93,20 @@ object NewsMarchTrainCorpusProcess {
       //    df_cms.write.mode("overwrite").save("news_sub_classification/trainCorpus/marked/markedcms")
 
       // 人工线下标注
+
+      val manual_label_science = {
+        val science_ori = spark.read.json(science_path)
+        val science_cleanUDF = udf{(word: String) => word.toLowerCase().replace(" ","")}
+        val mark_id = science_ori.select(col("news_id").cast(StringType),col("resource_id"))
+        science_ori.withColumn("article_id", concat_ws("", mark_id.schema.fieldNames.map(col): _*))
+          .withColumn("one_level", science_cleanUDF(col("top_category")))
+          .withColumn("two_level", science_cleanUDF(col("sub_category")))
+          .withColumnRenamed("third_category", "three_level")
+          .filter("two_level != ''")
+          .select("article_id","one_level", "two_level", "three_level")
+      }
+
+
       val manual_label_tech = {
         val clean_techUDF = udf{(word: String) => word.toLowerCase().replace("mobile phone","mobile-phone").replace("apps", "app").replace(" ", "").replace("mobile-phone", "mobile phone")}
         spark.read.json(tech_check_path)
@@ -146,12 +161,13 @@ object NewsMarchTrainCorpusProcess {
         "'startups', 'bond', 'e-commerce','others','auction','consumption', 'credit', 'blockchain')")
 
 
-      val df = df_cms.union(manual_label_tech).union(manual_label_auto).union(manual_label_gossip).union(manual_label_business)
+      val df = df_cms.union(manual_label_science).union(manual_label_tech).union(manual_label_auto).union(manual_label_gossip).union(manual_label_business)
 
       val result = df.join(ori_df,Seq("article_id")).withColumn("content", getcontentUDF(col("article.html"))).drop("article")
-      result.write.mode("overwrite").save("news_sub_classification/trainCorpus/march_marked_clean_tmp")
+      // 2019-03-14标注结果整理
+      result.write.mode("overwrite").save("news_sub_classification/trainCorpus/march_marked_clean_314")
 
-      val out = spark.read.parquet("news_sub_classification/trainCorpus/march_marked_clean_tmp")
+      val out = spark.read.parquet("news_sub_classification/trainCorpus/march_marked_clean_314")
       out.filter("one_level = 'business'").coalesce(1).write.format("json").mode("overwrite").save("news_sub_classification/trainCorpus/march_marked_clean/business")
       out.filter("one_level = 'sports'").coalesce(1).write.format("json").mode("overwrite").save("news_sub_classification/trainCorpus/march_marked_clean/sports")
       out.filter("one_level = 'national'").coalesce(1).write.format("json").mode("overwrite").save("news_sub_classification/trainCorpus/march_marked_clean/national")

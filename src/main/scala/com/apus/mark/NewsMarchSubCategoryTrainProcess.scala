@@ -337,7 +337,7 @@ object NewsMarchSubCategoryTrainProcess {
         val other = Seq("books","performance","variety show")
         val groupUDF = udf {
           (word: String) =>
-            if (art.contains(word)) "art&culture"
+            if (art.contains(word)) "arts&culture"
             else if (ce_go.contains(word)) "celebrity&gossip"
             else if (other.contains(word)) "others"
             else word
@@ -577,7 +577,7 @@ object NewsMarchSubCategoryTrainProcess {
       val result = {
 
         val main_word = Seq("health", "fashion&trends", "travel", "food&wine", "relationships", "parenting", "beauty", "shopping guide", "nature&pets",
-          "astrology","books","arts&culture","events","shopping guide","home&garden")
+          "astrology","books","arts&culture","shopping guide","home&garden")
         val health_word = Seq("fitness & yoga", "weight loss & diet", "fitness", "yoga","diet", "weight loss")
         val fashion_word = Seq("skin care","makeup")
         val groupUDF = udf{
