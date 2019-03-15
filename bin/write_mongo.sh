@@ -34,6 +34,6 @@ done
 --conf spark.driver.maxResultSize=6g \
 --conf spark.rpc.message.maxSize=2040 \
 --conf spark.yarn.executor.memoryOverhead=3g \
---class com.apus.mongodb.WriteMongodb \
+--class com.privyalgo.mongodb.WriteMongodb \
 ${basepath}/lib/AlgorithmProject-spark-1.0.jar \
 -outputUrl ${outputurl} -hdfspath ${readhdfspath}

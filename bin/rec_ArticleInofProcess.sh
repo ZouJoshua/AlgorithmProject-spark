@@ -47,7 +47,7 @@ done
 --conf spark.driver.maxResultSize=6g \
 --conf spark.rpc.message.maxSize=2040 \
 --conf spark.yarn.executor.memoryOverhead=3g \
---class com.apus.mongodb.ArticleInfoProcess \
+--class com.privyalgo.mongodb.ArticleInfoProcess \
 ${RUNJAR} \
 -date ${dt} \
 -entity_category_path ${entityCategoryPath} \
