@@ -319,5 +319,17 @@ object NewsSubCategoryTrainCheck {
 
 
 
+    //------------------------------------11 一级模型数据清除重新训练模型 -----------------------------------------
+    //
+    def top_category_update_check(spark: SparkSession) = {
+      val df = spark.read.json("news_content/sub_classification_check/top_category_update*")
+      val drop1 = df.filter("one_level = predict_one_level").filter("predict_one_level_proba < 0.6").select("article_id")
+      val drop2 = df.filter("one_level != predict_one_level").filter("predict_one_level_proba > 0.6").select("article_id")
+      val drop_df = drop1.union(drop2).withColumn("drop", lit(1))
+      val new_ori = df.join(drop_df, Seq("article_id"), "left").filter("drop is null").drop("drop").drop("predict_one_level", "predict_one_level_proba")
+      new_ori.coalesce(1).write.format("json").mode("overwrite").save("news_content/top_classification/top_category_update")
+    }
+
+
   }
 }
