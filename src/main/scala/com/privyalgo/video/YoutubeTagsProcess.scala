@@ -54,15 +54,15 @@ object YoutubeTagsProcess {
 
     youtube_IN_df.coalesce(1).write.mode("overwrite").format("json").save("video/youtube_detail")
 
-    // 整理抓取的tags
-    val tags = youtube_IN_df.select("_id","tags_name").flatMap(r => r.getAs[Seq[String]]("tags_name")).withColumn("tags_name_lower", lower(col("value")))
-    val tags_out = tags.groupBy("value").count.sort(desc("count")).map(r => r.getAs[String]("value") + "\t" + r.getAs[Int]("count").toString).toDF("tags")
-    tags_out.coalesce(1).write.mode("overwrite").format("text").save("video/youtube_tags")
-
-    // 整理已计算的tags
-    val engined_tags = youtube_IN_df.select("_id","engined_tags_name").flatMap(r => r.getAs[Seq[String]]("engined_tags_name")).withColumn("tags_name_lower", lower(col("value")))
-    val engined_tags_out = engined_tags.groupBy("value").count.sort(desc("count")).map(r => r.getAs[String]("value") + "\t" + r.getAs[Int]("count").toString).toDF("tags")
-    engined_tags_out.coalesce(1).write.mode("overwrite").format("text").save("video/youtube_engined_tags")
+//    // 整理抓取的tags
+//    val tags = youtube_IN_df.select("_id","tags_name").flatMap(r => r.getAs[Seq[String]]("tags_name")).withColumn("tags_name_lower", lower(col("value")))
+//    val tags_out = tags.groupBy("value").count.sort(desc("count")).map(r => r.getAs[String]("value") + "\t" + r.getAs[Int]("count").toString).toDF("tags")
+//    tags_out.coalesce(1).write.mode("overwrite").format("text").save("video/youtube_tags")
+//
+//    // 整理已计算的tags
+//    val engined_tags = youtube_IN_df.select("_id","engined_tags_name").flatMap(r => r.getAs[Seq[String]]("engined_tags_name")).withColumn("tags_name_lower", lower(col("value")))
+//    val engined_tags_out = engined_tags.groupBy("value").count.sort(desc("count")).map(r => r.getAs[String]("value") + "\t" + r.getAs[Int]("count").toString).toDF("tags")
+//    engined_tags_out.coalesce(1).write.mode("overwrite").format("text").save("video/youtube_engined_tags")
 
   }
 }
