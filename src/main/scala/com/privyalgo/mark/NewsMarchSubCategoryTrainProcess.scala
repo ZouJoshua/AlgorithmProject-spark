@@ -686,5 +686,53 @@ object NewsMarchSubCategoryTrainProcess {
     }
 
 
+    //------------------------------------9 更新科学分类 -----------------------------------------
+
+
+    def update_science_process(spark: SparkSession,
+                                     newsPath: String="/user/hive/warehouse/apus_dw.db/dw_news_data_hour",
+                                     dt: String="2019-03-19") = {
+
+      val newsPath = "/user/hive/warehouse/apus_ai.db/recommend/article/article_data_merged"
+      val getcontentUDF = udf { (html: String) => Jsoup.parse(html).text() }
+      val ori_df = {
+        spark.read.option("basePath", newsPath).parquet("/user/hive/warehouse/apus_ai.db/recommend/article/article_data_merged/dt=*")
+          .selectExpr("resource_id as article_id", "article", "title", "url")
+      }
+      // 历史标注文件
+      val dt = "2019-03-19"
+      val science_path = "/user/caifuli/news/all_data/science"
+      val science_ori = spark.read.json(science_path)
+      val cleanUDF = udf{(word: String) => word.toLowerCase().replace(" ","")}
+
+      val science = {
+        val mark_id = science_ori.select(col("news_id").cast(StringType),col("resource_id"))
+        science_ori.withColumn("article_id", concat_ws("", mark_id.schema.fieldNames.map(col): _*))
+          .withColumn("one_level", cleanUDF(col("top_category")))
+          .withColumn("two_level", cleanUDF(col("sub_category")))
+          .withColumnRenamed("third_category", "three_level")
+          .filter("two_level != ''")
+          .select("article_id","one_level", "two_level", "three_level")
+      }
+      // 写入文件
+      val science_tmp = {
+        science.join(ori_df, Seq("article_id"))
+          .withColumn("content", getcontentUDF(col("article.html"))).drop("article")
+      }
+      science_tmp.write.mode("overwrite").save("news_content/sub_classification/tmp/science_all")
+
+      val result = {
+        val all = {
+          spark.read.parquet("news_content/sub_classification/tmp/science_all")
+        }
+        all
+      }
+
+      println(">>>>>>>>>>正在写入数据")
+      result.coalesce(1).write.format("json").mode("overwrite").save("news_content/sub_classification/science/science_update")
+      println(">>>>>>>>>>写入数据完成")
+
+    }
+
   }
 }

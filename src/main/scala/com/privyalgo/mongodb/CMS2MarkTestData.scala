@@ -43,11 +43,11 @@ object CMS2MarkTestData {
     // 测试库
     val outputUri = "mongodb://127.0.0.1:27017/article_repo.article_info_doc"
     val buss_type = 0
-//    val df = spark.read.parquet(inputPath).filter("dt = '2019-03-16'").withColumn("bussType",lit(buss_type)).withColumn("batch_id",lit(2019031801)).drop("dt")
-//     val df = spark.read.parquet(inputPath).filter("dt = '2019-03-17'").withColumn("bussType",lit(buss_type)).withColumn("batch_id",lit(2019031802)).drop("dt")
-//    val df = spark.read.parquet(inputPath).filter("dt = '2019-03-18'").withColumn("bussType",lit(buss_type)).withColumn("batch_id",lit(2019031803)).drop("dt")
-    val df = spark.read.parquet(inputPath).filter("dt = '2019-03-15'").withColumn("bussType",lit(buss_type)).withColumn("batch_id",lit(2019031804)).drop("dt")
-    val cols = Seq("inner_type", "rqstid", "resource_id", "url", "title", "country", "lang", "category", "sub_class", "sub_category", "third_category", "create_time", "pub_time", "source", "source_id", "summary", "words", "introduction", "image_count", "thumbnail_count", "share_link", "article", "status", "news_type", "latest_interest", "extra", "account" , "expire_time", "resource_type", "is_hotnews", "is_newarticle", "is_partner", "generate_url", "origin_category", "algo_profile", "images", "nlp_keywords", "repeat_content", "bussType","batch_id")
+//    val df = spark.read.parquet(inputPath).filter("dt = '2019-03-16'").withColumn("buss_type",lit(buss_type)).withColumn("batch_id",lit(2019031801)).drop("dt")
+//     val df = spark.read.parquet(inputPath).filter("dt = '2019-03-17'").withColumn("buss_type",lit(buss_type)).withColumn("batch_id",lit(2019031802)).drop("dt")
+//    val df = spark.read.parquet(inputPath).filter("dt = '2019-03-18'").withColumn("buss_type",lit(buss_type)).withColumn("batch_id",lit(2019031803)).drop("dt")
+    val df = spark.read.parquet(inputPath).filter("dt = '2019-03-15'").withColumn("buss_type",lit(buss_type)).withColumn("batch_id",lit(2019031804)).drop("dt")
+    val cols = Seq("inner_type", "rqstid", "resource_id", "url", "title", "country", "lang", "category", "sub_class", "sub_category", "third_category", "create_time", "pub_time", "source", "source_id", "summary", "words", "introduction", "image_count", "thumbnail_count", "share_link", "article", "status", "news_type", "latest_interest", "extra", "account" , "expire_time", "resource_type", "is_hotnews", "is_newarticle", "is_partner", "generate_url", "origin_category", "algo_profile", "images", "nlp_keywords", "repeat_content", "buss_type","batch_id")
     val saveDf = df.select(cols.map(col):_*)
     val num = saveDf.count()
     saveDf.write.options(Map("spark.mongodb.output.uri" -> outputUri)).mode("append").format("com.mongodb.spark.sql").save()
