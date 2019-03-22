@@ -79,17 +79,20 @@ object CMS2MarkTestDataV1 {
         .add("name", StringType)
     }
 
-    val originType = {
+    val image_originType = {
       new StructType()
-        .add("size",DoubleType)
-        .add("width",DoubleType)
+        .add("size",IntegerType)
+        .add("width",IntegerType)
         .add("url",StringType)
-        .add("height",DoubleType)
+        .add("height",IntegerType)
     }
 
     val imagesType = {
       new StructType()
-        .add("origin",originType)
+        .add("origin",image_originType)
+        .add("detail_large",image_originType)
+        .add("list_large",image_originType)
+        .add("list_small",image_originType)
     }
 
     val share_linkType = {
@@ -102,7 +105,8 @@ object CMS2MarkTestDataV1 {
 
     val extraType = {
       new StructType()
-        .add("_id",StringType)
+        .add("id",IntegerType)
+        .add("image_source", ArrayType(StringType))
     }
 
     // 解析html，text加上apus标签后，再拼接成html
@@ -150,12 +154,12 @@ object CMS2MarkTestDataV1 {
         .withColumn("images_new",from_json(col("images"), ArrayType(imagesType)))
         .withColumn("algo_profile_new",from_json(col("algo_profile"),algo_profileSchema))
         .withColumn("share_link_new", from_json(col("share_link"), share_linkType))
-        //        .withColumn("extra_new", from_json(col("extra"), extraType))
+        .withColumn("extra_new", from_json(col("extra"), extraType))
         .selectExpr("inner_type", "rqstid","url","title","country","lang","source","summary","introduction",
-        "generate_url","account","resource_id","article","dt",
+        "generate_url","account_new as account","resource_id","article","dt",
         "algo_profile_new as algo_profile","images_new as images",
         "repeat_content","nlp_keywords_new as nlp_keywords",
-        "share_link_new as share_link", "extra",
+        "share_link_new as share_link", "extra_new as extra",
         "cast(category as int) category", "cast(sub_class as int) sub_class",
         "cast(sub_category as int) sub_category","cast(third_category as int) third_category",
         "cast(create_time as long) create_time","cast(pub_time as long) pub_time",
