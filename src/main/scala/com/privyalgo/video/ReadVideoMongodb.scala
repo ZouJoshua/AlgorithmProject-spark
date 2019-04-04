@@ -31,7 +31,8 @@ object ReadVideoMongodb {
         "spark.mongodb.input.readPreference.name" -> "secondary",
         "spark.mongodb.input.partitioner" -> "MongoPaginateBySizePartitioner",
         "spark.mongodb.input.partitionerOptions.partitionKey"  -> "_id",
-        "spark.mongodb.input.partitionerOptions.partitionSizeMB"-> "32"))
+        "spark.mongodb.input.partitionerOptions.partitionSizeMB"-> "32",
+        "mergeSchema" -> "true"))
       .load()
     //all
 //    val df_list = List("article_doc_id", "article_id", "choose_keywords",
@@ -45,10 +46,12 @@ object ReadVideoMongodb {
 //    val num = originDf.count()
 
 //    originDf.repartition(1).write.mode(SaveMode.Overwrite).parquet(outputPath)
-    println(df.show)
-    val out_df = df.filter("resource_type = '20002' or resource_type = '11'")
+     val out_df = df.filter("resource_type = 20002 or resource_type = 11").filter("ctime < 1554195600")
+//    val out_df = df.filter("resource_type in (20002,11,20101,20104,20105,20106,20107,20108,20109,20110,20112)")//.filter("ctime < 1554195600")
+//    out_df.show()
     val num = out_df.count()
-    out_df.write.mode(SaveMode.Overwrite).parquet(outputPath)
+    println(num)
+    out_df.write.mode(SaveMode.Overwrite).save(outputPath)
     println("\nSuccessfully write %s data to HDFS: %s".format(num, outputPath))
     spark.stop()
   }
