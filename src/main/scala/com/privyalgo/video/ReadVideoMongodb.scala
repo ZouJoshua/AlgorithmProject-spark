@@ -58,55 +58,56 @@ object ReadVideoMongodb {
 //    out_df1.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20002))
 //    println("\nSuccessfully write %s data to HDFS: %s".format(num1, outputPath))
 
-//    val out_df2 = df.filter("resource_type = 11").filter("ctime < 1554195600")
-//    val num2 = out_df2.count()
-//    out_df2.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(11))
-//    println("\nSuccessfully write %s data to HDFS: %s".format(num2, outputPath))
+    // youtube 6（11）id修改过
+    val out_df2 = df.filter("resource_type = 6").filter("ctime < 1554195600")
+    val num2 = out_df2.count()
+    out_df2.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(6))
+    println("\nSuccessfully write %s data to HDFS: %s".format(num2, outputPath))
 
 //    val out_df3 = df.filter("resource_type = 20101").filter("ctime < 1554195600")
 //    val num3 = out_df3.count()
 //    out_df3.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20101))
 //    println("\nSuccessfully write %s data to HDFS: %s".format(num3, outputPath))
 //
-    val out_df4 = df.filter("resource_type = 20104").filter("ctime < 1554195600")
-    val num4 = out_df4.count()
-    out_df4.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20104))
-    println("\nSuccessfully write %s data to HDFS: %s".format(num4, outputPath))
-
-    val out_df5 = df.filter("resource_type = 20105").filter("ctime < 1554195600")
-    val num5 = out_df5.count()
-    out_df5.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20105))
-    println("\nSuccessfully write %s data to HDFS: %s".format(num5, outputPath))
-
-    val out_df6 = df.filter("resource_type = 20106").filter("ctime < 1554195600")
-    val num6 = out_df6.count()
-    out_df6.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20106))
-    println("\nSuccessfully write %s data to HDFS: %s".format(num6, outputPath))
-
-    val out_df7 = df.filter("resource_type = 20107").filter("ctime < 1554195600")
-    val num7 = out_df7.count()
-    out_df7.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20107))
-    println("\nSuccessfully write %s data to HDFS: %s".format(num7, outputPath))
-
-    val out_df8 = df.filter("resource_type = 20108").filter("ctime < 1554195600")
-    val num8 = out_df8.count()
-    out_df8.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20108))
-    println("\nSuccessfully write %s data to HDFS: %s".format(num8, outputPath))
-
-    val out_df9 = df.filter("resource_type = 20109").filter("ctime < 1554195600")
-    val num9 = out_df9.count()
-    out_df9.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20109))
-    println("\nSuccessfully write %s data to HDFS: %s".format(num9, outputPath))
-
-    val out_df10 = df.filter("resource_type = 20110").filter("ctime < 1554195600")
-    val num10 = out_df10.count()
-    out_df10.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20110))
-    println("\nSuccessfully write %s data to HDFS: %s".format(num10, outputPath))
-
-    val out_df11 = df.filter("resource_type = 20112").filter("ctime < 1554195600")
-    val num11 = out_df11.count()
-    out_df11.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20112))
-    println("\nSuccessfully write %s data to HDFS: %s".format(num11, outputPath))
+//    val out_df4 = df.filter("resource_type = 20104").filter("ctime < 1554195600")
+//    val num4 = out_df4.count()
+//    out_df4.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20104))
+//    println("\nSuccessfully write %s data to HDFS: %s".format(num4, outputPath))
+//
+//    val out_df5 = df.filter("resource_type = 20105").filter("ctime < 1554195600")
+//    val num5 = out_df5.count()
+//    out_df5.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20105))
+//    println("\nSuccessfully write %s data to HDFS: %s".format(num5, outputPath))
+//
+//    val out_df6 = df.filter("resource_type = 20106").filter("ctime < 1554195600")
+//    val num6 = out_df6.count()
+//    out_df6.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20106))
+//    println("\nSuccessfully write %s data to HDFS: %s".format(num6, outputPath))
+//
+//    val out_df7 = df.filter("resource_type = 20107").filter("ctime < 1554195600")
+//    val num7 = out_df7.count()
+//    out_df7.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20107))
+//    println("\nSuccessfully write %s data to HDFS: %s".format(num7, outputPath))
+//
+//    val out_df8 = df.filter("resource_type = 20108").filter("ctime < 1554195600")
+//    val num8 = out_df8.count()
+//    out_df8.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20108))
+//    println("\nSuccessfully write %s data to HDFS: %s".format(num8, outputPath))
+//
+//    val out_df9 = df.filter("resource_type = 20109").filter("ctime < 1554195600")
+//    val num9 = out_df9.count()
+//    out_df9.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20109))
+//    println("\nSuccessfully write %s data to HDFS: %s".format(num9, outputPath))
+//
+//    val out_df10 = df.filter("resource_type = 20110").filter("ctime < 1554195600")
+//    val num10 = out_df10.count()
+//    out_df10.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20110))
+//    println("\nSuccessfully write %s data to HDFS: %s".format(num10, outputPath))
+//
+//    val out_df11 = df.filter("resource_type = 20112").filter("ctime < 1554195600")
+//    val num11 = out_df11.count()
+//    out_df11.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(20112))
+//    println("\nSuccessfully write %s data to HDFS: %s".format(num11, outputPath))
 
     spark.stop()
   }

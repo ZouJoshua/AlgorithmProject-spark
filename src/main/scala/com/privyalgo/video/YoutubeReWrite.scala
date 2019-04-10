@@ -19,17 +19,17 @@ object YoutubeReWrite {
 
 //    val dt = "2019-03-15"
     val dt = "2019-04-02"
-    val video_path = "/user/zoushuai/news_content/writemongo/video/dt=2019-04-07"
+    val video_path = "/user/zoushuai/news_content/writemongo/video/dt=2019-04-{07,10}"
     val video_youtube_path = "video/youtube/dt=%s".format(dt)
+    val video_youtube_6_path = "video/youtube_6/dt=%s".format(dt)
     val video_nonyoutube_path = "video/nonyoutube/dt=%s".format(dt)
-    val df = spark.read.parquet(video_path)
+    val df = spark.read.option("basePath","/user/zoushuai/news_content/writemongo/").parquet(video_path)
 
     val nlp_keywordType = {
       new StructType()
         .add("keyword",StringType)
         .add("weight",IntegerType)
     }
-
 
 
     val nlp_udf = udf((t:Seq[String]) => if(t!=null&&t.nonEmpty) "["+ t.mkString(",")+ "]" else "")
@@ -48,14 +48,36 @@ object YoutubeReWrite {
 
     // youtube视频数据
     val youtube_video_df = {
-      video_df.filter("resource_type in (20002,11)")
+      video_df.filter("country = 'IN' and lang= 'en'")
+        .filter("inner_type is not null")
+        .filter("article_title is not null")
+        .filter("text is not null")
+        .filter("source_url is not null")
+        .filter("category is not null")
+        .filter("source_id is not null")
+        .filter("resource_type is not null")
+        .filter("tags is not null")
+        .filter("id is not null")
+        .filter("resource_type = 6")
+//      .filter("resource_type in (20002,6)")
     }
 
-    youtube_video_df.coalesce(10).write.format("json").mode("overwrite").save(video_youtube_path)
+    youtube_video_df.coalesce(1).write.format("json").mode("overwrite").save(video_youtube_6_path)
+//    youtube_video_df.coalesce(10).write.format("json").mode("overwrite").save(video_youtube_path)
 
     // 非youtube视频数据
     val nonyoutube_video_df = {
-      video_df.filter("resource_type not in (20002,11)")
+      video_df.filter("country = 'IN' and lang= 'en'")
+        .filter("inner_type is not null")
+        .filter("article_title is not null")
+        .filter("text is not null")
+        .filter("source_url is not null")
+        .filter("category is not null")
+        .filter("source_id is not null")
+        .filter("resource_type is not null")
+        .filter("tags is not null")
+        .filter("id is not null")
+        .filter("resource_type not in (20002,11)")
     }
     nonyoutube_video_df.coalesce(1).write.format("json").mode("overwrite").save(video_nonyoutube_path)
 
