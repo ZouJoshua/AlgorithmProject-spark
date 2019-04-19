@@ -33,6 +33,12 @@ object ReadVideoMongodb {
         "spark.mongodb.input.partitionerOptions.partitionKey"  -> "_id",
         "spark.mongodb.input.partitionerOptions.partitionSizeMB"-> "32"))
       .load()
+
+    val business_df = df.filter("business_type = 1")
+    val num = business_df.count()
+    business_df.write.mode(SaveMode.Overwrite).save(outputPath+ "/business_type=%s".format(1))
+    println("\nSuccessfully write %s data to HDFS: %s".format(num, outputPath))
+
     //all
 //    val df_list = List("article_doc_id", "article_id", "choose_keywords",
 //                  "manual_keywords", "is_right", "one_level", "two_level", "three_level",
@@ -59,10 +65,10 @@ object ReadVideoMongodb {
 //    println("\nSuccessfully write %s data to HDFS: %s".format(num1, outputPath))
 
     // youtube 6（11）id修改过
-    val out_df2 = df.filter("resource_type = 6").filter("ctime < 1554195600")
-    val num2 = out_df2.count()
-    out_df2.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(6))
-    println("\nSuccessfully write %s data to HDFS: %s".format(num2, outputPath))
+//    val out_df2 = df.filter("resource_type = 6").filter("ctime < 1554195600")
+//    val num2 = out_df2.count()
+//    out_df2.write.mode(SaveMode.Overwrite).save(outputPath+ "/rt=%s".format(6))
+//    println("\nSuccessfully write %s data to HDFS: %s".format(num2, outputPath))
 
 //    val out_df3 = df.filter("resource_type = 20101").filter("ctime < 1554195600")
 //    val num3 = out_df3.count()

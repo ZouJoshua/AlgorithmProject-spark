@@ -81,5 +81,12 @@ object YoutubeReWrite {
     }
     nonyoutube_video_df.coalesce(1).write.format("json").mode("overwrite").save(video_nonyoutube_path)
 
+    // business_type = 1 的视频数据（20190419临时）
+
+    val bPath = "/user/zoushuai/news_content/writemongo/video/dt=2019-04-19"
+    val bOutPath = "video/business_type/dt=2019-04-19"
+    val b_df = spark.read.parquet(bPath)
+    b_df.coalesce(1).write.format("json").mode("overwrite").save(bOutPath)
+
   }
 }
