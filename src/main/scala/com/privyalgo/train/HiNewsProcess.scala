@@ -34,7 +34,7 @@ object HiNewsProcess {
     val hi_category_df = spark.read.json(hi_category_path).selectExpr("id","top_category","result.tag as tags")
 
     val hi_category = hi_category_df.join(hi_df,Seq("id"))
-    hi_category.coalesce(1).write.format("json").mode("overwrite").save(hi_category_out_path)
+    hi_category.repartition(1).write.format("json").mode("overwrite").save(hi_category_out_path)
 
   }
 }
