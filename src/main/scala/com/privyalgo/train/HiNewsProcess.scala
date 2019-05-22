@@ -32,9 +32,14 @@ object HiNewsProcess {
       spark.read.parquet(hi_news_path)
         .filter("country = 'IN' and lang = 'hi'")
         .selectExpr("resource_id as id", "url", "title", "article.html as html", "category")
+        .filter("html is not null")
+        .filter("title is not null")
         .withColumn("content", getcontentUDF(col("html")))
         .drop("html")
     }
+
+    // 印地语html解析出内容保存
+    hi_df.filter("length(content) > 50").repartition(5).write.format("json").mode("overwrite").save("hi_news/raw_data")
 
 //    val hi_category_df = spark.read.json(hi_category_path).selectExpr("id","top_category","result.tag as tags")
     val hi_category_df = spark.read.json(hi_category_path).selectExpr("id","top_category")
