@@ -34,11 +34,19 @@ object ReadVideoMongodb {
         "spark.mongodb.input.partitionerOptions.partitionSizeMB"-> "32"))
       .load()
 
-    val business_df = df.filter("business_type = 1")
-    val num = business_df.count()
-    business_df.write.mode(SaveMode.Overwrite).save(outputPath+ "/business_type=%s".format(1))
-    println("\nSuccessfully write %s data to HDFS: %s".format(num, outputPath))
+//    val business_df = df.filter("business_type = 1")
+//    val num = business_df.count()
+//    business_df.write.mode(SaveMode.Overwrite).save(outputPath+ "/business_type=%s".format(1))
+//    println("\nSuccessfully write %s data to HDFS: %s".format(num, outputPath))
 
+    //*******//
+    //视频分类//
+    //*******//
+
+    val video_df = df.select("_id","inner_type","country","lang","text","article_title","resource_type","trial","business_type")
+    val num = video_df.count()
+    video_df.write.mode(SaveMode.Overwrite).save(outputPath)
+    println("\nSuccessfully write %s data to HDFS: %s".format(num, outputPath))
     //all
 //    val df_list = List("article_doc_id", "article_id", "choose_keywords",
 //                  "manual_keywords", "is_right", "one_level", "two_level", "three_level",
