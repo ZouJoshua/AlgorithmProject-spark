@@ -43,10 +43,15 @@ object ReadVideoMongodb {
     //视频分类//
     //*******//
 
-    val video_df = df.select("_id","inner_type","country","lang","text","article_title","resource_type","trial","business_type")
-    val num = video_df.count()
-    video_df.write.mode(SaveMode.Overwrite).save(outputPath)
-    println("\nSuccessfully write %s data to HDFS: %s".format(num, outputPath))
+    val b_video_df = df.filter("inner_type = 'video'").filter("business_type = 0").filter("trial is not null").selectExpr("id","inner_type","country","lang","text","article_title","resource_type","business_type","trial.category as category","trial.sub_category as sub_category","trial.third_category as third_category")
+    val num1 = b_video_df.count()
+    b_video_df.write.mode(SaveMode.Overwrite).save(outputPath + "/business_type=0")
+    println("\nSuccessfully write %s data to HDFS: %s".format(num1, outputPath))
+
+    val g_video_df = df.filter("inner_type = 'video'").filter("business_type = 1").filter("trial is not null").selectExpr("id","inner_type","country","lang","text","article_title","resource_type","business_type","trial.category as category","trial.sub_category as sub_category","trial.third_category as third_category")
+    val num2 = g_video_df.count()
+    g_video_df.write.mode(SaveMode.Overwrite).save(outputPath + "/business_type=1")
+    println("\nSuccessfully write %s data to HDFS: %s".format(num2, outputPath))
     //all
 //    val df_list = List("article_doc_id", "article_id", "choose_keywords",
 //                  "manual_keywords", "is_right", "one_level", "two_level", "three_level",
