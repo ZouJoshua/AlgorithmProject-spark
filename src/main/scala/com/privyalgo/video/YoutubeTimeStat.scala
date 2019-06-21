@@ -52,6 +52,33 @@ object YoutubeTimeStat {
 //    更新时间
     df.filter("ut >= '2019-01'").groupBy("ut").count.sort(desc("ut")).show(100)
 
+    //****************//
+    //美国视频更新时间处理//
+    //****************//
+
+    val v_path = "video/video_data/dt=2019-06-12"
+
+    val df1 = {
+      spark.read.parquet("video/video_data/dt=2019-04-02")
+        .filter("country = 'US' and lang= 'en'")
+        .select("id", "ptime", "resource_type","utime", "ctime", "expire_time")
+        .withColumn("utime", col("utime") * lit(1000L))
+        .withColumn("ctime", col("ctime") * lit(1000L))
+        .withColumn("pt", to_date(timeUDF(col("ptime"))))
+        .withColumn("ut", to_date(timeUDF(col("utime"))))
+        .withColumn("ct", to_date(timeUDF(col("ctime"))))
+    }
+
+
+    // 发布时间
+    df1.groupBy("pt","resource_type").count.sort(desc("pt")).show(100)
+
+
+    //    抓取时间
+    df1.groupBy("ct","resource_type").count.sort(desc("ct")).show(100)
+    //    更新时间
+    df1.groupBy("ut","resource_type").count.sort(desc("ut")).show(100)
+
 
 
   }
