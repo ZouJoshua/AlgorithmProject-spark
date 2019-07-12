@@ -79,6 +79,26 @@ object YoutubeTimeStat {
     //    更新时间
     df1.groupBy("ut","resource_type").count.sort(desc("ut")).show(100)
 
+    //****************//
+    //英语视频标注时间处理//
+    //****************//
+
+    val trail_df = {
+      spark.read.parquet("/user/hive/warehouse/apus_ai.db/recommend/common/video_trial/dt=2019-07-11")
+        .filter("country in ('US','IN')")
+        .filter("lang = 'en'")
+        .select("id", "ptime", "resource_type","utime", "ctime","article_title","text","category","sub_category")
+        .withColumn("utime", col("utime") * lit(1000L))
+        .withColumn("ctime", col("ctime") * lit(1000L))
+        .withColumn("pt", to_date(timeUDF(col("ptime"))))
+        .withColumn("ut", to_date(timeUDF(col("utime"))))
+        .withColumn("ct", to_date(timeUDF(col("ctime"))))
+    }
+
+    trail_df.filter("ct >= '2019-02'").groupBy("ct").count.sort(desc("ct")).show(100)
+    trail_df.filter("category is not null").filter("ct >= '2019-02'").groupBy("category").count.sort(desc("count")).show(100)
+    trail_df.filter("category is not null").filter("article_title is not null").groupBy("category").count.sort(desc("count")).show(100)
+
 
 
   }

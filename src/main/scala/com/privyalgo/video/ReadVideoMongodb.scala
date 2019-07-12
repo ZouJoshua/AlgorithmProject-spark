@@ -1,6 +1,6 @@
 package com.privyalgo.video
 
-import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.apache.spark.sql.functions._
 import com.privyalgo.mongodb.DBConfig
 import org.bson.types.Decimal128
@@ -43,67 +43,71 @@ object ReadVideoMongodb {
     //视频分类//
     //*******//
 
-    val b_video_df = {
-      df.filter("inner_type = 'video'")
-        .filter("business_type = 0")
-        .filter("trial is not null")
-//        .selectExpr("id","inner_type","country","lang","text","article_title","utime",
-//          "ctime", "ptime", "resource_type","business_type","source_url","trial.category as category",
-//          "trial.sub_category as sub_category", "trial.third_category as third_category",
-//          "trial.timeliness as timeliness","trial.review as review","trial.language_type as language_type",
-//          "trial.language as language","trial.is_valid as is_valid","trial.op_id as op_id",
-//          "trial.op_time as op_time",
-//          "review.category as r_category",
-//          "review.sub_category as r_sub_category", "review.third_category as r_third_category",
-//          "review.timeliness as r_timeliness","review.review as r_review","review.language_type as r_language_type",
-//          "review.language as r_language","review.is_valid as r_is_valid","review.op_id as r_op_id",
-//          "review.op_time as r_op_time", "review.is_agree as r_is_agree"
-//        )
-        .selectExpr("id","inner_type","country","lang","text","article_title","utime",
-          "ctime", "ptime", "resource_type","business_type","source_url","trial","review"
-        )
-        .drop("trial.choose_keywords")
-        .drop("trial.manual_keywords")
-        .drop("trial.review_types")
-        .drop("trial.emotion")
-        .drop("trial.taste")
-        .drop("trial.region")
-        .drop("trial.is_agree")
-        .drop("review.choose_keywords")
-        .drop("review.manual_keywords")
-        .drop("review.review_types")
-        .drop("review.emotion")
-        .drop("review.taste")
-        .drop("review.region")
-    }
-    val num1 = b_video_df.count()
-    b_video_df.write.mode(SaveMode.Overwrite).save(outputPath + "/business_type=0")
-    println("\nSuccessfully write %s data to HDFS: %s".format(num1, outputPath))
+    def all_video(df: DataFrame): Unit={
 
-    val g_video_df = {
-      df.filter("inner_type = 'video'")
-        .filter("business_type = 1")
-        .filter("trial is not null")
-//        .selectExpr("id","inner_type","country","lang","text","article_title","utime",
-//          "ctime", "ptime", "resource_type","business_type","source_url","trial.category as category",
-//          "trial.sub_category as sub_category", "trial.third_category as third_category",
-//          "trial.timeliness as timeliness","trial.review as review","trial.language_type as language_type",
-//          "trial.language as language","trial.is_valid as is_valid","trial.op_id as op_id",
-//          "trial.op_time as op_time",
-//          "review.category as r_category",
-//          "review.sub_category as r_sub_category", "review.third_category as r_third_category",
-//          "review.timeliness as r_timeliness","review.review as r_review","review.language_type as r_language_type",
-//          "review.language as r_language","review.is_valid as r_is_valid","review.op_id as r_op_id",
-//          "review.op_time as r_op_time", "review.is_agree as r_is_agree"
-//        )
-        .selectExpr("id","inner_type","country","lang","text","article_title","utime",
-        "ctime", "ptime", "resource_type","business_type","source_url","trial","review"
-      )
-        .drop("trial.is_agree")
+      val all_df = {
+        df.filter("inner_type = 'video'")
+          .selectExpr("id","inner_type","country","lang","text","article_title","utime",
+            "ctime", "ptime", "resource_type","business_type","source_url")
+      }
+      val all_count = all_df.count()
+      all_df.write.mode(SaveMode.Overwrite).save(outputPath + "/all_video")
+      println("\nSuccessfully write %s data to HDFS: %s".format(all_count, outputPath))
+
     }
-    val num2 = g_video_df.count()
-    g_video_df.write.mode(SaveMode.Overwrite).save(outputPath + "/business_type=1")
-    println("\nSuccessfully write %s data to HDFS: %s".format(num2, outputPath))
+
+//    all_video(spark)
+
+
+    def trial_video(df:DataFrame): Unit ={
+      val b_video_df = {
+        df.filter("inner_type = 'video'")
+          .filter("business_type = 0")
+          .filter("trial is not null")
+          .filter("tags is not null")
+          .selectExpr("id","inner_type","country","lang","text","article_title","utime",
+            "ctime", "ptime", "resource_type","business_type","source_url", "tags", "trial.category as category",
+            "trial.sub_category as sub_category", "trial.third_category as third_category",
+            "trial.timeliness as timeliness","trial.review as review","trial.language_type as language_type",
+            "trial.language as language","trial.is_valid as is_valid","trial.op_id as op_id",
+            "trial.op_time as op_time",
+            "review.category as r_category",
+            "review.sub_category as r_sub_category", "review.third_category as r_third_category",
+            "review.timeliness as r_timeliness","review.review as r_review","review.language_type as r_language_type",
+            "review.language as r_language","review.is_valid as r_is_valid","review.op_id as r_op_id",
+            "review.op_time as r_op_time", "review.is_agree as r_is_agree"
+          )
+      }
+      val num1 = b_video_df.count()
+      b_video_df.write.mode(SaveMode.Overwrite).save(outputPath + "/business_type=0")
+      println("\nSuccessfully write %s data to HDFS: %s".format(num1, outputPath))
+
+      val g_video_df = {
+        df.filter("inner_type = 'video'")
+          .filter("business_type = 1")
+          .filter("trial is not null")
+          .filter("tags is not null")
+          .selectExpr("id","inner_type","country","lang","text","article_title","utime",
+            "ctime", "ptime", "resource_type","business_type","source_url", "tags","trial.category as category",
+            "trial.sub_category as sub_category", "trial.third_category as third_category",
+            "trial.timeliness as timeliness","trial.review as review","trial.language_type as language_type",
+            "trial.language as language","trial.is_valid as is_valid","trial.op_id as op_id",
+            "trial.op_time as op_time",
+            "review.category as r_category",
+            "review.sub_category as r_sub_category", "review.third_category as r_third_category",
+            "review.timeliness as r_timeliness","review.review as r_review","review.language_type as r_language_type",
+            "review.language as r_language","review.is_valid as r_is_valid","review.op_id as r_op_id",
+            "review.op_time as r_op_time", "review.is_agree as r_is_agree"
+          )
+
+      }
+      val num2 = g_video_df.count()
+      g_video_df.write.mode(SaveMode.Overwrite).save(outputPath + "/business_type=1")
+      println("\nSuccessfully write %s data to HDFS: %s".format(num2, outputPath))
+
+    }
+
+    trial_video(df)
     //all
 //    val df_list = List("article_doc_id", "article_id", "choose_keywords",
 //                  "manual_keywords", "is_right", "one_level", "two_level", "three_level",

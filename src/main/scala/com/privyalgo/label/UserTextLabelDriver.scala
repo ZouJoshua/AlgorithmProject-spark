@@ -1,6 +1,6 @@
 package com.privyalgo.label
 
-import com.apus.algo.common.util.DataLoader
+import com.privyalgo.label.DataLoader
 import org.apache.spark.sql.functions.{col, collect_list}
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.{SparkConf, SparkContext}
