@@ -15,14 +15,14 @@ object BrowserCategory {
       .getOrCreate()
     val sc = spark.sparkContext
 
-    val ori_path = "/user/hive/warehouse/apus_ai.db/recommend/common/video_trial/dt=2019-07-11/business_type=0"
+    val ori_path = "/user/hive/warehouse/apus_ai.db/recommend/common/video_trial/dt=2019-07-31/business_type=0"
 
     val df = {
       spark.read.parquet(ori_path)
         .filter("category in ('211','212','213','214','215','216','217'" +
         "'218','219','220','221','222','223','224','225','226','227','228','229','230')")
         .select("id","country","lang","text","article_title",
-          "source_url","category","sub_category","third_category")
+          "source_url","category","sub_category","third_category", "tags.name")
     }
 
     val review_df = {
@@ -35,7 +35,7 @@ object BrowserCategory {
           "'218','219','220','221','222','223','224','225','226','227','228','229','230')")
         .selectExpr("id","country","lang","text","article_title",
         "source_url","r_category as category","r_sub_category as sub_category",
-        "r_third_category as third_category")
+        "r_third_category as third_category", "tags.name")
         .withColumn("mark",lit(1))
     }
     val right_df = df.join(review_df.select("id","mark"),Seq("id"),"left").filter("mark is null").drop("mark")
