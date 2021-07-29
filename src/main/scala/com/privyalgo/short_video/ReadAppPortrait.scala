@@ -8,6 +8,7 @@ import org.apache.spark.sql.functions.{col, _}
  * Created by Joshua on 2021/7/14
  */
 object ReadAppPortrait {
+
     def main(args: Array[String]): Unit = {
         val appName = "Read-DYApp-UserPortrait-Data"
         val spark = SparkSession.builder()
@@ -130,5 +131,46 @@ object ReadAppPortrait {
 
         val attributes = entity_words_in_ownthink_with_attributes.groupBy("attributes").agg(count("attributes").as("count")).sort(desc("count"))
         attributes.coalesce(1).write.format("json").mode("overwrite").save("/region04/27367/app/develop/zs/aie_user_portrait/entity_words_attributes_key")
+
+//        df.filter("attributes = '分类'").show(50,false)
+
+        //-------------------------------------------
+        // 用户兴趣交集（高频）与ownthink交集（4w+）添加属性
+
+        val common_keywords_path = "/region04/27367/app/develop/zs/aie_user_portrait/all_common_keywords"
+        val common_keywords = {
+            spark.read.json(common_keywords_path)
+              .withColumnRenamed("common_keywords", "entity_word")
+              .withColumnRenamed("count", "common_keywords_count")
+        }
+
+        val entity_words_path = "/region04/27367/app/develop/zs/aie_user_portrait/entity_words_in_ownthink"
+        val entity_words = spark.read.json(entity_words_path).withColumnRenamed("count", "keywords_collection_count")
+
+        val common_keywords_in_ownthink = common_keywords.join(entity_words, Seq("entity_word"), "left").filter("if_entity is not null")
+
+        val ownthink_path = "/region04/27367/app/develop/zs/aie_user_portrait/ownthink"
+        val ownthink = {
+            spark.read.format("csv").option("header", "true").load(ownthink_path)
+              .withColumnRenamed("实体", "entity_word")
+              .withColumnRenamed("属性", "attributes")
+              .withColumnRenamed("值", "value")
+        }
+
+        val common_keywords_in_ownthink_with_attributes = ownthink.join(common_keywords_in_ownthink, Seq("entity_word"), "left").filter("if_entity is not null")
+        val output = "/region04/27367/app/develop/zs/aie_user_portrait/common_keywords_in_ownthink_with_attributes"
+        common_keywords_in_ownthink_with_attributes.coalesce(1).write.format("json").mode("overwrite").save(output)
+        val attributes = common_keywords_in_ownthink_with_attributes.groupBy("attributes").agg(count("attributes").as("count")).sort(desc("count"))
+        attributes.coalesce(1).write.format("json").mode("overwrite").save("/region04/27367/app/develop/zs/aie_user_portrait/common_keywords_attributes_key")
+
+        val df = spark.read.json(output)
+        val attributes_values = df.groupBy("attributes", "value").agg(count("attributes").as("count")).sort(desc("count"))
+        attributes_values.coalesce(1).write.format("json").mode("overwrite").save("/region04/27367/app/develop/zs/aie_user_portrait/common_keywords_attributes_values_key")
+
+        df.filter("attributes = '标签'").filter("value = '计算机科学技术名词'").show(50,false)
+        df.filter("value = '政治'").show(50,false)
+        df.filter("entity_word = '实景拍摄'").show(50,false)
+
+
     }
 }
